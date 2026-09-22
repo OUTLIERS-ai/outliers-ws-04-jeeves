@@ -1,7 +1,7 @@
 # Jeeves: a personal-assistant cockpit over your own second brain and CRM
 
 ```
-git clone https://github.com/OUTLIERS-ai/outliers-ws-04-jeeves && cd outliers-ws-04-jeeves && python install.py && python start.py
+git clone https://github.com/OUTLIERS-ai/outliers-ws-04-jeeves; cd outliers-ws-04-jeeves; python install.py; python start.py
 ```
 
 One browser page on your own computer. Every ability is a panel you can drag,

@@ -132,6 +132,28 @@ def typed_enter(text):
     return re.sub(r"(\]: |\(y/N\): )", lambda m: m.group(1) + "(Enter)\n", text)
 
 
+DEMO_HOME = r"C:\Users\sam"          # the made-up home folder the terminal pictures show
+DEMO_JEEVES = r"C:\Users\sam\Downloads\outliers-ws-04-jeeves"
+
+
+def plain_paths(text, work):
+    """The installer runs in a throwaway work folder with a long test name. The picture shows the
+    same words with that folder swapped for a plain made-up home, so nobody reads our test folder
+    as a path they should have. Only the folder names change; every word the installer printed stays."""
+    # The made-up world keeps its .claude folder at home/Documents/home, so show that as the home too.
+    for real, shown in [(str(work / "home" / "Documents" / "home"), DEMO_HOME), (str(work / "home"), DEMO_HOME), (str(work / "install-run"), DEMO_JEEVES),
+                        (str(ROOT), DEMO_JEEVES)]:
+        text = text.replace(real, shown).replace(real.replace("\\", "/"), shown)
+    return text
+
+
+def port_free(port):
+    import socket
+    with socket.socket() as s:
+        s.settimeout(0.5)
+        return s.connect_ex(("127.0.0.1", port)) != 0
+
+
 def terminal(title, blocks):
     """blocks: list of (command, output)."""
     parts = []
@@ -148,6 +170,12 @@ def main(work, out):
     from playwright.sync_api import sync_playwright
     from jeeves import sessions
     from jeeves.server import serve_in_thread
+
+    # The made-up world points its Work board and FleetView at the real default ports (3020, 3010),
+    # so the pictures match the guide. If a real board is running there, stop: never photograph it.
+    for p_ in (3020, 3010):
+        if not port_free(p_):
+            sys.exit("Port %d is in use (a real ProjectForge or FleetView?). Stop it, then run again." % p_)
 
     work = Path(work).resolve()
     out = Path(out).resolve()
@@ -174,8 +202,8 @@ def main(work, out):
     # ---- the installer and start.py, for real, in the made-up home
     inst_cfg = work / "install-run" / "config.json"
     env_i = dict(env, JEEVES_CONFIG=str(inst_cfg))
-    install_out = run([sys.executable, str(ROOT / "install.py")], env_i, stdin="\n\n\n\n\n")
-    again_out = run([sys.executable, str(ROOT / "install.py")], env_i, stdin="\n\n\n\n\n")
+    install_out = plain_paths(run([sys.executable, str(ROOT / "install.py")], env_i, stdin="\n\n\n\n\n"), work)
+    again_out = plain_paths(run([sys.executable, str(ROOT / "install.py")], env_i, stdin="\n\n\n\n\n"), work)
     versions = [("python --version", run([sys.executable, "--version"], env)),
                 ("claude --version", run([shutil.which("claude") or "claude", "--version"], env)
                  if shutil.which("claude") else "(Claude Code is not installed on this computer)"),
@@ -195,7 +223,7 @@ def main(work, out):
         drawn("terminal-checks.png", "<div class='wrap'>" + terminal(
             "Terminal: checking what Jeeves needs (2026-09-22)", versions) + "</div>", 1400)
         drawn("terminal-install.png", "<div class='wrap'>" + terminal(
-            "Terminal: python install.py, pressing Enter 5 times (made-up home folder)",
+            "Terminal: python install.py, pressing Enter 5 times (made-up folders; yours will be your own)",
             [("python install.py", typed_enter(install_out))]) + "</div>", 1400)
         drawn("terminal-install-again.png", "<div class='wrap'>" + terminal(
             "Terminal: running the installer a second time", [("python install.py", "...\n" + typed_enter(again_out[again_out.find("  config.json already"):]))]) + "</div>", 1400)
@@ -224,7 +252,7 @@ def main(work, out):
             {"sel": ".dv-tab:has(.dv-default-tab-content)", "n": 2, "at": "right", "dx": 60, "label": "Chat: ask anything about your notes and CRM. Enter sends."},
             {"sel": "[data-card=people]", "n": 3, "at": "left", "label": "Across everything: read this first. Click a heading to open its panel."},
             {"sel": ".vb", "n": 4, "at": "left", "label": "Vaults: both vaults, read-only. Agents, Work board and FleetView are tabs here."},
-            {"sel": "#model", "n": 5, "at": "below", "dy": 8, "label": "Model: best (strongest), deep, or fast (cheapest)."},
+            {"sel": "#model", "n": 5, "at": "below", "dy": 8, "label": "Model: best (Opus, the strongest), deep (Sonnet, the middle one) or fast (Haiku, the cheapest)."},
             {"sel": "#layout-btn", "n": 6, "at": "below", "dy": 8, "label": "Layouts: 4 ready-made arrangements of all 10 panels, and your own."},
             {"sel": "#add-btn", "n": 7, "at": "below", "dy": 8, "label": "+ Panel: bring back any panel you closed, or pop one out."},
             {"sel": ".grp-actions", "n": 8, "at": "left", "dx": -18, "label": "Make a group fill the screen. Double-clicking a tab does the same; Esc puts it back."},
@@ -241,14 +269,14 @@ def main(work, out):
             {"sel": ".act", "n": 1, "at": "left", "dx": -12, "label": "An arrow line: a file Claude is reading, as it happens."},
             {"sel": ".composer .stop", "n": 2, "at": "left", "label": "Stop: ends the answer. Jeeves keeps what was written so far."},
             {"sel": ".chat-head .orb-big", "n": 3, "at": "below", "dy": 16, "label": "The orb brightens while the answer comes in."},
-            {"sel": "#status-line", "n": 4, "at": "right", "dx": 60, "label": "The status line: what Claude is doing right now."},
+            {"sel": "#status-line", "n": 4, "at": "right", "dx": 60, "label": "The status line under the name: what Claude is doing right now, for example \"Read: Today.md\"."},
         ]
         raw = shoot_annotated(pg, "chat-answering.png", items, tmp, 1600)
         legend_png(draw, raw, items, save("chat-answering.png"), 1600)
         wait_idle(pg)
         os.environ["FAKE_CLAUDE_DELAY"] = "0.01"
         items = [
-            {"sel": ".msg.bot p:last-child .wl", "n": 1, "at": "below", "dy": 20, "label": "A [[link]] in the answer: click it and the note opens in Vaults, in whichever vault has it."},
+            {"sel": ".msg.bot p:last-child .wl", "n": 1, "at": "below", "dy": 20, "label": "A link to another note (a note name in double square brackets): click it and the note opens in Vaults."},
             {"sel": ".chat-head .sub", "n": 2, "at": "right", "dx": 30, "label": "What Chat may do: read and search, nothing else, unless you allow more in config.json."},
             {"sel": ".ptools .newchat", "n": 3, "at": "top", "dy": -24, "label": "New conversation: Claude forgets the conversation and starts fresh."},
         ]
@@ -274,7 +302,7 @@ def main(work, out):
         wait_idle(pg)
         del os.environ["FAKE_CLAUDE_RESULT_ERROR"]
         pg.evaluate("document.querySelector('.msg.err details').open = true")
-        items = [{"sel": ".msg.err", "n": 1, "at": "left", "label": "What went wrong, in plain words. Details shows Claude Code's own message."},
+        items = [{"sel": ".msg.err", "n": 1, "at": "left", "label": "What went wrong, in plain words. Details shows Claude Code's own message. /login means: type claude in a terminal, then type /login."},
                  {"sel": ".msg.err .again", "n": 2, "at": "right", "dx": 30, "dy": 16, "label": "Try again sends the same message once you have fixed it."}]
         raw = shoot_annotated(pg, "chat-failed.png", items, tmp, 1600)
         legend_png(draw, raw, items, save("chat-failed.png"), 1600)
@@ -391,14 +419,14 @@ def cards(items, cols):
             % (cols, "".join("<div class='box'><h3>%s</h3><div>%s</div></div>" % (t, d) for t, d in items)))
 
 
-DIAGRAM_WHY = """<div class='wrap'><h1>Before: 5 places to look. After: 1 page.</h1>
+DIAGRAM_WHY = """<div class='wrap'><h1>Jeeves reads 5 places and shows them on 1 page</h1>
 <p class='sub'>Jeeves only reads. Your CRM, your notes and Claude Code's own log files stay where they are.</p>
 <div style='display:grid;grid-template-columns:1fr 90px 1fr;align-items:center;gap:10px'>
 <div style='display:grid;gap:12px'>
 <div class='box'><h3>Your CRM vault</h3>who to speak to today (<code>Today.md</code>)</div>
 <div class='box'><h3>Your second brain</h3>today's note, what changed, what is unticked</div>
 <div class='box'><h3>Claude Code's log files</h3>what it did today, and how many tokens</div>
-<div class='box'><h3>Your agents folders</h3>every agent and what it is for</div>
+<div class='box'><h3>The folders that hold your agents</h3>every agent (<code>.claude/agents</code>) and what it is for</div>
 <div class='box'><h3>Your other apps</h3>ProjectForge and FleetView, if running</div></div>
 <div style='font-size:64px;color:#c9a96a;text-align:center'>&rarr;</div>
 <div class='box' style='padding:26px'><h3>Jeeves, 1 page in your browser</h3>
@@ -417,13 +445,13 @@ DIAGRAM_TIMELINE = """<div class='wrap'><h1>How the original was built (June to 
     "<div class='brass' style='text-align:right;font-weight:600'>%s</div>"
     "<div style='width:14px;height:14px;border-radius:50%%;margin-top:6px;background:%s'></div>"
     "<div>%s</div></div>" % (d, c, t) for d, c, t in [
-        ("2026-06-13", "#3ecf8e", "Local server on 127.0.0.1, port 4040. Claude Code became the brain. First panels."),
+        ("2026-06-13", "#3ecf8e", "Local server on 127.0.0.1, port 4040. Claude Code answered every question. First panels."),
         ("2026-06-13", "#e0a84a", "A cloned voice, PC control and a live terminal. All left out of this download."),
-        ("2026-06-14 to 17", "#e0a84a", "A heartbeat every 15 minutes, and phone alerts (switched off the same day)."),
-        ("2026-06-14 to 17", "#3ecf8e", "Lesson: fill a panel when it appears, never at page load. Default model back to the strongest."),
+        ("2026-06-14 to 17", "#e0a84a", "A timer that started Claude every 15 minutes, and phone alerts (switched off the same day)."),
+        ("2026-06-14 to 17", "#3ecf8e", "Lesson: fill each panel only once it is on screen. Default model back to the strongest."),
         ("2026-06-20", "#3ecf8e", "A calm, minimal redesign rejected: 'Jeeves is a FULL UI - that's the point'. Across everything added."),
-        ("2026-06-21", "#3ecf8e", "The orb, drawn in code. A 3-column layout went live."),
-        ("2026-07-08", "#e0a84a", "Paused for token burn: timers started Claude on their own."),
+        ("2026-06-21", "#3ecf8e", "The orb, drawn by the page itself. A 3-column layout went live."),
+        ("2026-07-08", "#e0a84a", "Paused: its timers kept starting Claude and using tokens."),
         ("2026-07-09", "#e0a84a", "Would not start: it needed a folder outside its own."),
         ("2026-09-22", "#3ecf8e", "This rebuild: no timers, nothing outside its folder, read-only chat by default."),
     ])
@@ -435,12 +463,12 @@ DIAGRAM_COST = """<div class='wrap'><h1>What costs tokens, and what does not</h1
 <ul style='margin:6px 0;padding-left:1.2em;line-height:1.8'>
 <li>Opening Jeeves and every reading panel</li><li>Today, Across everything, Recommendations</li>
 <li>Vaults: opening, filtering, searching notes</li><li>Agents, Activity, Tokens</li>
-<li>The refresh once a minute while the tab is showing</li><li>Moving, closing and popping out panels</li></ul></div>
+<li>The automatic re-read of your files once a minute, while the Jeeves browser tab is on screen</li><li>Moving, closing and popping out panels</li></ul></div>
 <div class='box' style='border-color:#6b5a2f'><h3>Uses tokens</h3>
 <ul style='margin:6px 0;padding-left:1.2em;line-height:1.8'>
-<li>Each message you send in Chat: 1 Claude Code run</li>
+<li>Each message you send in Chat starts Claude Code once</li>
 <li>Each run re-reads your rulebook (<code>CLAUDE.md</code>) and the conversation so far</li>
-<li>The model you pick changes the price: <code>fast</code> is cheapest, <code>best</code> strongest</li>
+<li>The model you pick changes the price: <code>fast</code> (Haiku) is cheapest, <code>deep</code> (Sonnet) the middle, <code>best</code> (Opus) strongest</li>
 <li>Nothing else. There is no timer that starts Claude.</li></ul></div></div></div>"""
 
 DIAGRAM_FILES = """<div class='wrap'><h1>What is in the folder, and what Jeeves writes</h1>
@@ -448,7 +476,7 @@ DIAGRAM_FILES = """<div class='wrap'><h1>What is in the folder, and what Jeeves 
 %s</div>""" % cards([
     ("You run these", "<code>install.py</code> asks 4 questions and writes the settings<br><code>start.py</code> starts, stops, or says it is already running"),
     ("Written by the installer", "<code>config.json</code>: every setting<br><code>config.json.bak-&lt;date&gt;</code>: your old settings, when an answer changes<br><code>Start Jeeves (hidden).vbs</code> (Windows): start with no window"),
-    ("Written while it runs", "<code>state/chat-sessions.json</code>: the conversation number<br><code>state/jeeves.pid</code>: which program and port<br><code>state/read-only-settings.json</code>: the blocked tools"),
+    ("Written while it runs", "<code>state/chat-sessions.json</code>: the conversation number<br><code>state/jeeves.pid</code>: the ID of the running Jeeves, and its port<br><code>state/read-only-settings.json</code>: the blocked tools"),
     ("Only if you said yes", "<code>Jeeves.vbs</code> in your Startup folder (Windows)<br>a launch file in <code>Library/LaunchAgents</code> (Mac)<br>Removed by <code>python install.py --uninstall</code>"),
     ("The program", "<code>jeeves/</code>: the server and the page<br><code>tests/</code>: checks on made-up data<br><code>tools/demo.py</code>: a made-up world to try first"),
     ("To read", "<code>README.md</code>, this guide in <code>guide/</code><br><code>WHAT-I-STOLE.md</code>: what it was built from, and the licences<br><code>config.example.json</code>: every setting with an example"),
@@ -459,7 +487,7 @@ DIAGRAM_FIT = """<div class='wrap'><h1>Where each change goes</h1>
 %s</div>""" % cards([
     ("config.json", "Name and orb words, models, what Chat may do, folders, your other apps' addresses. No code."),
     ("jeeves/static/app.js", "A new panel, buttons, the chat panel, the Layouts menu."),
-    ("jeeves/server.py", "A new route a panel reads from, for example your content engine's drafts."),
+    ("jeeves/server.py", "A new address inside Jeeves that a panel reads its data from, for example your content engine's drafts."),
     ("Your second brain's CLAUDE.md", "How Claude behaves when it answers from Jeeves: where it may write, how it replies."),
     ("tests/", "A check for every change, on made-up data, so it cannot break quietly."),
     ("Nothing in your vaults", "Jeeves reads them. Changes to your notes come from Claude (if allowed) or your agents."),

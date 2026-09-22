@@ -82,9 +82,8 @@ _Generated {date} from the event log. Do not edit by hand: this page is rewritte
 | 4 | Leah Grant | Engaged with something you posted | 4 days ago |
 | 5 | Marcus Webb | Quiet, and due a word | 23 days ago |
 
-Ordered by how quickly the reason goes off, not by how much anybody is
-worth. A reply at the top is not more important than the person below
-it. It is more perishable.
+Ordered by how soon each reason goes stale. A reply ranks first
+because it goes stale fastest.
 
 ---
 
@@ -158,9 +157,9 @@ def build(root, port=4099, now=None):
         "name": "Jeeves", "port": port, "second_brain": str(b), "crm_vault": str(c),
         "agents_dirs": [], "claude_home": str(home / ".claude"),
         "claude_command": [sys.executable, str(HERE / "fake_claude.py")],
-        "apps": {"projectforge": {"url": "http://127.0.0.1:39020",
+        "apps": {"projectforge": {"url": "http://127.0.0.1:3020",
                                   "repo": "https://github.com/OUTLIERS-ai/outliers-ws-03-projectforge"},
-                 "fleetview": {"url": "http://127.0.0.1:39010",
+                 "fleetview": {"url": "http://127.0.0.1:3010",
                                "repo": "https://github.com/OUTLIERS-ai/outliers-ws-02-fleetview"}},
         "ccusage": "off",
     }

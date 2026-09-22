@@ -310,8 +310,8 @@ def main(argv=None):
         import playwright  # noqa: F401
         pw = "found"
     except ImportError:
-        pw = "not found - only needed to retake the guide's pictures"
-    say("  playwright: %s" % pw)
+        pw = "not found"
+    say("  playwright (only needed to retake the guide's pictures): %s" % pw)
     if not port_free(port) and old.get("port") != port:
         say("  Port %d is busy right now. Jeeves will say so when it starts; pick another "
             "with python install.py --port 4041" % port)
