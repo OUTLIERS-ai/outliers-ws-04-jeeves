@@ -1,0 +1,213 @@
+# -*- coding: utf-8 -*-
+"""vaults.py - read-only views of your second brain and your CRM.
+
+Nothing in this file writes to a vault. Every path a browser asks for is
+checked to be inside the vault it names, so a crafted address such as
+`../../secret.txt` is refused rather than served.
+"""
+
+import re
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from . import config as C
+
+SKIP_PARTS = {".git", ".obsidian", ".trash", "node_modules", "__pycache__",
+              "_engine", "_layers", "_state", ".claude"}
+MAX_FILES = 4000
+MAX_BYTES = 400_000
+
+
+def _vault_map(cfg):
+    return {k: (label, p) for k, label, p in C.vaults(cfg)}
+
+
+def listing(cfg):
+    out = []
+    for key, label, p in C.vaults(cfg):
+        out.append({"key": key, "label": label, "path": str(p), "exists": p.is_dir()})
+    return out
+
+
+def _md_files(root):
+    n = 0
+    for p in root.rglob("*.md"):
+        rel = p.relative_to(root)
+        if set(rel.parts[:-1]) & SKIP_PARTS:
+            continue
+        yield p, rel
+        n += 1
+        if n >= MAX_FILES:
+            return
+
+
+def tree(cfg, key):
+    vm = _vault_map(cfg)
+    if key not in vm:
+        return {"error": "unknown vault"}
+    label, root = vm[key]
+    if not root.is_dir():
+        return {"key": key, "label": label, "exists": False, "files": []}
+    files = []
+    for p, rel in _md_files(root):
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        files.append({"path": rel.as_posix(), "mtime": int(st.st_mtime), "size": st.st_size})
+    files.sort(key=lambda f: f["path"].lower())
+    return {"key": key, "label": label, "exists": True, "files": files}
+
+
+def safe_path(root, rel):
+    """The file `rel` inside `root`, or None if it would escape the vault."""
+    try:
+        root_r = root.resolve()
+        target = (root_r / rel).resolve()
+    except (OSError, ValueError):
+        return None
+    if target != root_r and root_r not in target.parents:
+        return None
+    return target
+
+
+def read(cfg, key, rel):
+    vm = _vault_map(cfg)
+    if key not in vm:
+        return {"error": "unknown vault"}
+    _, root = vm[key]
+    if not rel or not rel.lower().endswith(".md"):
+        return {"error": "only markdown notes can be opened here"}
+    target = safe_path(root, rel)
+    if target is None:
+        return {"error": "that path is outside the vault"}
+    if not target.is_file():
+        return {"error": "no such note"}
+    data = target.read_bytes()[:MAX_BYTES]
+    return {"key": key, "path": rel, "text": data.decode("utf-8", errors="replace"),
+            "mtime": int(target.stat().st_mtime)}
+
+
+def search(cfg, q, limit=60):
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"q": q, "hits": []}
+    pat = re.compile(re.escape(q), re.I)
+    hits = []
+    for key, label, root in C.vaults(cfg):
+        if not root.is_dir():
+            continue
+        for p, rel in _md_files(root):
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            m = pat.search(text)
+            if not m and not pat.search(rel.as_posix()):
+                continue
+            snippet = ""
+            if m:
+                s = max(0, m.start() - 60)
+                snippet = text[s:m.end() + 80].replace("\n", " ")
+            hits.append({"key": key, "label": label, "path": rel.as_posix(), "snippet": snippet})
+            if len(hits) >= limit:
+                return {"q": q, "hits": hits}
+    return {"q": q, "hits": hits}
+
+
+# ---------------------------------------------------------------- Today
+
+def _daily_note(cfg, root, day):
+    names = [day.strftime("%Y-%m-%d") + ".md", day.strftime("%Y-%m-%d") + " daily.md"]
+    folders = [""] + list(cfg.get("daily_note_folders") or [])
+    for f in folders:
+        for n in names:
+            p = root / f / n if f else root / n
+            if p.is_file():
+                return p
+    return None
+
+
+def _moved(root, days=3, limit=8):
+    cut = (datetime.now() - timedelta(days=days)).timestamp()
+    out = []
+    for p, rel in _md_files(root):
+        try:
+            m = p.stat().st_mtime
+        except OSError:
+            continue
+        if m > cut:
+            out.append((m, rel.as_posix()))
+    out.sort(reverse=True)
+    return [{"path": r, "when": datetime.fromtimestamp(m).strftime("%a %H:%M")}
+            for m, r in out[:limit]]
+
+
+_TODO = re.compile(r"^\s*[-*]\s*\[ \]\s*(.+)$", re.M)
+
+
+def _open_items(root, limit=10):
+    out = []
+    for p, rel in _md_files(root):
+        try:
+            s = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for m in _TODO.finditer(s):
+            out.append({"text": m.group(1).strip()[:140], "path": rel.as_posix()})
+            if len(out) >= limit:
+                return out
+    return out
+
+
+def today(cfg, now=None):
+    """What the day looks like: the CRM's ranked page and the second brain's day."""
+    now = now or datetime.now()
+    vm = _vault_map(cfg)
+    out = {"date": now.strftime("%A %d %B %Y"), "crm": None, "brain": None}
+
+    if "crm" in vm:
+        root = vm["crm"][1]
+        page = root / "Today.md"
+        if page.is_file():
+            out["crm"] = {"found": True, "path": "Today.md",
+                          "text": page.read_text(encoding="utf-8", errors="replace")[:MAX_BYTES],
+                          "built": datetime.fromtimestamp(page.stat().st_mtime).strftime("%a %d %b %H:%M")}
+        else:
+            out["crm"] = {"found": False, "vault": str(root),
+                          "hint": "No Today.md yet. In your CRM folder run: python _engine/today.py --write"}
+
+    if "brain" in vm:
+        root = vm["brain"][1]
+        b = {"found": root.is_dir(), "daily": None, "moved": [], "open": []}
+        if root.is_dir():
+            dn = _daily_note(cfg, root, now)
+            if dn:
+                b["daily"] = {"path": dn.relative_to(root).as_posix(),
+                              "text": dn.read_text(encoding="utf-8", errors="replace")[:MAX_BYTES]}
+            b["moved"] = _moved(root)
+            b["open"] = _open_items(root)
+        out["brain"] = b
+    return out
+
+
+# ---------------------------------------------------------------- Inbox
+
+INBOX_CANDIDATES = ["Inbox/Recommendations.md", "Recommendations.md",
+                    "Areas/Recommendations.md", "AI/Recommendations.md", "Inbox.md"]
+
+
+def inbox(cfg):
+    vm = _vault_map(cfg)
+    if "brain" not in vm:
+        return {"found": False, "hint": "No second brain is set in config.json."}
+    root = vm["brain"][1]
+    wanted = [cfg["inbox_file"]] if cfg.get("inbox_file") else INBOX_CANDIDATES
+    for rel in wanted:
+        p = safe_path(root, rel)
+        if p and p.is_file():
+            return {"found": True, "path": rel,
+                    "text": p.read_text(encoding="utf-8", errors="replace")[:MAX_BYTES]}
+    return {"found": False, "looked_for": wanted,
+            "hint": "Create %s in your second brain and anything you or your agents write "
+                    "there appears here." % wanted[0]}

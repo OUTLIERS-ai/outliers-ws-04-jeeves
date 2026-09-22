@@ -1,0 +1,78 @@
+# -*- coding: utf-8 -*-
+"""Every test runs against a made-up world in a temporary folder.
+
+No test reads or writes your real home folder, your real ~/.claude, your
+vaults, your Startup folder or your scheduled tasks: HOME, USERPROFILE,
+APPDATA and CLAUDE_CONFIG_DIR all point into the temporary folder first.
+"""
+import json
+import sys
+from datetime import datetime
+import urllib.request
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tools"))
+
+import demo  # noqa: E402
+from jeeves import sessions  # noqa: E402
+from jeeves.server import serve_in_thread  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def fake_home(tmp_path, monkeypatch):
+    h = tmp_path / "fakehome"
+    h.mkdir()
+    for var in ("HOME", "USERPROFILE"):
+        monkeypatch.setenv(var, str(h))
+    monkeypatch.setenv("APPDATA", str(h / "AppData" / "Roaming"))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(h / ".claude"))
+    monkeypatch.setenv("JEEVES_STATE", str(tmp_path / "state"))
+    monkeypatch.delenv("JEEVES_CONFIG", raising=False)
+    sessions.clear_cache()
+    return h
+
+
+@pytest.fixture
+def world(tmp_path):
+    # Noon today, so the "today" totals do not depend on when the tests are run.
+    noon = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0)
+    cfg_path = demo.build(tmp_path / "world", now=noon)
+    return cfg_path
+
+
+@pytest.fixture
+def server(world):
+    srv = serve_in_thread(0, str(world))
+    base = "http://127.0.0.1:%d" % srv.server_address[1]
+    yield base, world
+    srv.shutdown()
+    srv.server_close()
+
+
+def get(url, headers=None):
+    req = urllib.request.Request(url, headers=headers or {})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return r.status, r.read().decode("utf-8")
+
+
+def get_json(url):
+    return json.loads(get(url)[1])
+
+
+def post(url, body, headers=None):
+    h = {"Content-Type": "application/json"}
+    h.update(headers or {})
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=h, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.status, r.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8")
+
+
+def events(sse_text):
+    return [json.loads(chunk[6:]) for chunk in sse_text.split("\n\n") if chunk.startswith("data: ")]
