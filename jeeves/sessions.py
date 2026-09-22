@@ -108,7 +108,9 @@ def parse_file(path):
             if t == "assistant":
                 msg = d.get("message") or {}
                 u = msg.get("usage")
-                if not u or te is None:
+                # "<synthetic>" is a message Claude Code writes itself (for example
+                # "Not logged in"); it used no tokens and is not a model.
+                if not u or te is None or msg.get("model") == "<synthetic>":
                     continue
                 k = (msg.get("id"), d.get("requestId"))
                 if k[0] and k in seen:
@@ -151,6 +153,8 @@ def activity(cfg, days=7, limit=40):
             if not info or not info["last"]:
                 continue
             tok = sum(u[2] + u[3] + u[4] + u[5] for u in info["usage"])
+            if tok == 0 and not info["title"]:
+                continue  # a run that failed before Claude answered: nothing to show
             out_tok = sum(u[3] for u in info["usage"])
             models = sorted({u[1] for u in info["usage"]})
             rows.append({

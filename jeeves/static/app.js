@@ -88,44 +88,100 @@ function popout(name) {
 function setStatus(t) { const s = $('#status-line'); if (s) s.textContent = t; }
 
 // ------------------------------------------------------------------ Chat
+// Rules learned the hard way (usability audit, 2026-09-22):
+// - 1 message at a time. Enter while an answer is coming in does not send; the
+//   server refuses a second run too, so 2 answers can never race.
+// - The conversation you can see is kept in this browser, so a reload shows it
+//   again. Claude remembers it anyway; now you can see what it remembers.
+// - Stop is not a crash: it shows a grey "Stopped" line, never a red error.
+// - A failure says what went wrong in plain words and offers Try again.
 const SESSION = 'main';
+const TKEY = 'jeeves.chat.' + SESSION;
+const FRIENDLY = {
+  login: 'Claude Code is not logged in. Open a terminal, type claude, log in, then press Try again.',
+  lost: 'Claude no longer had the earlier conversation, so Jeeves has let it go. Press Try again to start a fresh one.',
+  not_found: 'Claude Code was not found on this computer. Install it, log in once by typing claude in a terminal, then restart Jeeves.',
+  timeout: 'No answer came in time, so Jeeves stopped it.',
+  busy: 'Still answering your last message. Wait for it to finish, or press Stop first.',
+};
 function chatPanel() {
   const d = document.createElement('div');
   d.className = 'pane';
+  const power = CFG.read_only === false
+    ? 'It can read your notes and CRM, and you have allowed it to act (allow_actions in config.json).'
+    : 'It can read and search your notes and CRM. It cannot run commands, change files or use the internet unless you allow it in config.json.';
   d.innerHTML = `
     <div class="ptools"><span class="hint">Answered by your own Claude Code, working in your second brain</span>
+      <button class="sugg" title="Show the suggested questions">Suggestions</button>
       <button class="newchat" title="Start a fresh conversation">New conversation</button><button class="pop" title="Pop out">⧉</button></div>
     <div class="chat">
       <div class="chat-head"><div class="orb-big"><svg class="orb-svg"></svg></div>
-        <div><div class="who">${esc(CFG.name)}</div><div class="sub">Ask about anything in your notes or your CRM. It can read all of it. Whether it may change files is your choice, set in config.json.</div></div></div>
+        <div><div class="who">${esc(CFG.name)}</div><div class="sub">${esc(power)}</div></div></div>
       <div class="chips"></div>
+      <div class="banner" style="display:none"></div>
       <div class="log"></div>
       <div class="composer"><textarea rows="1" placeholder="Ask ${esc(CFG.name)}… (Enter to send, Shift+Enter for a new line)"></textarea>
         <button class="btn send">Send</button><button class="btn ghost stop" style="display:none">Stop</button></div>
     </div>`;
   return d;
 }
+function loadTranscript() { try { return JSON.parse(localStorage.getItem(TKEY) || '[]'); } catch (e) { return []; } }
+function saveTranscript(items) { try { localStorage.setItem(TKEY, JSON.stringify(items.slice(-200))); } catch (e) {} }
 function mountChat(el) {
   el.querySelector('.pop').onclick = () => popout('chat');
-  const log = $('.log', el), ta = $('textarea', el), send = $('.send', el), stopb = $('.stop', el);
+  const chat = $('.chat', el), log = $('.log', el), ta = $('textarea', el), send = $('.send', el), stopb = $('.stop', el), banner = $('.banner', el);
   if (window.JeevesOrb && !orbBig) orbBig = window.JeevesOrb($('.orb-svg', el), CFG.orb || {});
   const chips = ['What needs me today?', 'Who in my CRM should I speak to first, and why?', 'Summarise what moved in my second brain this week', 'Which of my agents should I use to write a follow-up?'];
   $('.chips', el).innerHTML = chips.map(c => `<span class="chip">${esc(c)}</span>`).join('');
-  $('.chips', el).onclick = e => { if (e.target.classList.contains('chip')) { ta.value = e.target.textContent; ta.focus(); } };
-  $('.newchat', el).onclick = async () => {
-    await fetch('/api/chat/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session: SESSION }) });
-    log.innerHTML = ''; setStatus('New conversation.');
-  };
-  const add = (cls, html) => { const m = document.createElement('div'); m.className = cls; m.innerHTML = html; log.appendChild(m); log.scrollTop = log.scrollHeight; return m; };
+  $('.chips', el).onclick = e => { if (e.target.classList.contains('chip')) { ta.value = e.target.textContent; ta.focus(); chat.classList.remove('show-chips'); } };
+  $('.sugg', el).onclick = () => chat.classList.toggle('show-chips');
+  let items = loadTranscript();
+  let busy = false, stopping = false;
+  const compact = () => chat.classList.toggle('compact', log.children.length > 0);
+  const add = (cls, html) => { const m = document.createElement('div'); m.className = cls; m.innerHTML = html; log.appendChild(m); log.scrollTop = log.scrollHeight; compact(); return m; };
   const orbs = s => { [orbTop, orbBig].forEach(o => o && o.setState(s)); };
-  async function go() {
-    const text = ta.value.trim(); if (!text) return;
-    ta.value = ''; add('msg you', esc(text));
+  const draw = it => {
+    if (it.role === 'you') return add('msg you', esc(it.text));
+    if (it.role === 'bot') return add('msg bot', md(it.text));
+    if (it.role === 'act') { const a = add('act', ''); a.textContent = it.text; return a; }
+    if (it.role === 'stopped') return add('msg note', esc(it.text));
+    if (it.role === 'err') return add('msg err', esc(it.text));
+    return add('msg note', esc(it.text));
+  };
+  // Redraw what this browser remembers, and say honestly what Claude remembers.
+  items.forEach(draw);
+  if (CFG.chat_updated) {
+    const when = new Date(CFG.chat_updated);
+    const w = isNaN(when) ? CFG.chat_updated : when.toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    add('msg note', esc(items.length
+      ? `Carrying on the conversation from ${w}. New conversation starts fresh.`
+      : `Claude is carrying on a conversation last answered ${w}, but its messages were not saved in this browser. New conversation starts fresh.`));
+  }
+  if (CFG.claude_found === false) {
+    banner.style.display = '';
+    banner.innerHTML = `<b>Claude Code was not found on this computer, so Chat cannot answer.</b> Every other panel works.
+      <ol><li>Install Claude Code (https://code.claude.com/docs/en/setup).</li><li>Open a new terminal and type <code>claude</code> once to log in.</li><li>Stop Jeeves and start it again.</li></ol>
+      If it is installed somewhere unusual, put its full path in <code>config.json</code> as <code>"claude_command"</code>.`;
+    ta.disabled = true; send.disabled = true;
+  }
+  $('.newchat', el).onclick = async () => {
+    if (busy) { setStatus('Press Stop first, then New conversation.'); return; }
+    await fetch('/api/chat/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session: SESSION }) });
+    log.innerHTML = ''; items = []; saveTranscript(items); CFG.chat_updated = null; compact(); setStatus('New conversation.');
+  };
+  async function go(again) {
+    const text = (again || ta.value).trim(); if (!text) return;
+    if (busy) { setStatus('Still answering. Wait for it to finish, or press Stop.'); return; }
+    busy = true; stopping = false;
+    if (!again) ta.value = '';
+    ta.style.height = 'auto';
+    add('msg you', esc(text)); items.push({ role: 'you', text });
     const bot = add('msg bot', '<span class="dim">Thinking…</span>');
-    let acc = '', gotText = false;
+    let acc = '', gotText = false, failed = null, stopped = false;
+    const acts = [];
     orbs('thinking'); setStatus('Working on it…'); send.disabled = true; stopb.style.display = '';
     try {
-      const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, model: $('#model').value, session: SESSION }) });
+      const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, model: $('#model') ? $('#model').value : 'best', session: SESSION }) });
       const rd = r.body.getReader(), dec = new TextDecoder(); let buf = '';
       for (;;) {
         const { value, done } = await rd.read(); if (done) break;
@@ -136,24 +192,52 @@ function mountChat(el) {
           if (!chunk.startsWith('data: ')) continue;
           let ev; try { ev = JSON.parse(chunk.slice(6)); } catch (e) { continue; }
           if (ev.type === 'delta') { if (!gotText) { orbs('speaking'); gotText = true; } acc += ev.text; bot.innerHTML = md(acc); }
-          else if (ev.type === 'activity') { const a = document.createElement('div'); a.className = 'act'; a.textContent = ev.text; log.insertBefore(a, bot); setStatus(ev.text); }
+          else if (ev.type === 'activity') { const a = document.createElement('div'); a.className = 'act'; a.textContent = ev.text; log.insertBefore(a, bot); acts.push(ev.text); setStatus(ev.text); }
           else if (ev.type === 'done') { if (ev.text) { acc = ev.text; bot.innerHTML = md(acc); } }
-          else if (ev.type === 'error') { add('msg err', esc(ev.text)); }
+          else if (ev.type === 'stopped') { stopped = true; }
+          else if (ev.type === 'error') { failed = ev; }
           log.scrollTop = log.scrollHeight;
         }
       }
-      if (!acc) bot.innerHTML = '<span class="dim">(no reply)</span>';
-    } catch (e) { add('msg err', 'Lost the connection to Jeeves: ' + esc(e)); }
-    orbs('idle'); setStatus('Ready.'); send.disabled = false; stopb.style.display = 'none';
+    } catch (e) { if (!stopping) failed = { code: 'connection', text: 'Lost the connection to Jeeves: ' + e }; else stopped = true; }
+    acts.forEach(a => items.push({ role: 'act', text: a }));
+    if (stopped || (stopping && !acc && !failed)) {
+      if (!acc) bot.remove(); else items.push({ role: 'bot', text: acc });
+      const t = acc ? 'Stopped. The part above is what Claude had written.' : 'Stopped before Claude wrote anything.';
+      add('msg note', esc(t)); items.push({ role: 'stopped', text: t });
+      setStatus('Stopped.');
+    } else if (failed) {
+      // Claude sometimes writes the error as its answer too: show it once, not twice.
+      if (!acc.trim() || acc.trim() === (failed.text || '').trim()) bot.remove(); else items.push({ role: 'bot', text: acc });
+      const plain = FRIENDLY[failed.code] || 'The reply failed.';
+      const e = add('msg err', `${esc(plain)}<details><summary>Details</summary>${esc(failed.text || '')}</details>`);
+      if (failed.code !== 'busy' && failed.code !== 'not_found') {
+        const b = document.createElement('button'); b.className = 'btn small again'; b.textContent = 'Try again';
+        b.onclick = () => { b.disabled = true; go(text); };
+        e.appendChild(b);
+      }
+      items.push({ role: 'err', text: plain });
+      setStatus(failed.code === 'busy' ? 'Still answering your last message.' : 'Last reply failed. Details are in the chat.');
+    } else {
+      if (!acc) bot.innerHTML = '<span class="dim">(Claude finished without writing anything)</span>';
+      else items.push({ role: 'bot', text: acc });
+      CFG.chat_updated = new Date().toISOString();
+      setStatus('Ready.');
+    }
+    saveTranscript(items);
+    orbs('idle'); busy = false; send.disabled = false; stopb.style.display = 'none';
   }
-  send.onclick = go;
-  stopb.onclick = () => fetch('/api/chat/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session: SESSION }) });
+  send.onclick = () => go();
+  stopb.onclick = () => { stopping = true; setStatus('Stopping…'); fetch('/api/chat/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session: SESSION }) }); };
   ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); } });
   ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(160, ta.scrollHeight) + 'px'; });
   window.__jeevesAsk = (t) => { ta.value = t; ta.focus(); };
+  window.__jeevesBusy = () => busy;
 }
 
 // ------------------------------------------------------------------ Today
+const noteName = p => esc(String(p).split('/').pop().replace(/\.md$/, ''));
+const noteDir = p => String(p).includes('/') ? esc(String(p).slice(0, String(p).lastIndexOf('/'))) : '';
 async function renderToday(body) {
   const d = await api('/api/today');
   let h = '';
@@ -166,8 +250,8 @@ async function renderToday(body) {
   if (b) {
     h += '<div class="card"><h3>From your second brain</h3>';
     if (b.daily) h += `<div class="dim">${esc(b.daily.path)}</div>` + md(b.daily.text);
-    if (b.moved.length) h += '<div class="muted" style="margin-top:6px">Moved in the last 3 days</div><ul>' + b.moved.map(m => `<li><span class="dim">${esc(m.when)}</span> <span class="wl" data-note="${esc(m.path)}">${esc(m.path)}</span></li>`).join('') + '</ul>';
-    if (b.open.length) h += '<div class="muted" style="margin-top:6px">Left unfinished</div><ul>' + b.open.map(o => `<li>☐ ${inline(o.text)} <span class="dim">· ${esc(o.path)}</span></li>`).join('') + '</ul>';
+    if (b.moved.length) h += '<div class="muted" style="margin-top:6px">Moved in the last 3 days</div><ul class="links">' + b.moved.map(m => `<li><span class="dim">${esc(m.when)}</span> <span class="wl" data-note="${esc(m.path)}">${noteName(m.path)}</span> <span class="dim">${noteDir(m.path)}</span></li>`).join('') + '</ul>';
+    if (b.open.length) h += '<div class="muted" style="margin-top:6px">Left unfinished</div><ul>' + b.open.map(o => `<li>☐ ${inline(o.text)} <span class="dim">·</span> <span class="wl" data-note="${esc(o.path)}">${noteName(o.path)}</span></li>`).join('') + '</ul>';
     if (!b.daily && !b.moved.length && !b.open.length) h += '<div class="empty">Nothing has moved and nothing is left open. That is a real answer, not an empty one.</div>';
     h += '</div>';
   }
@@ -176,12 +260,15 @@ async function renderToday(body) {
 
 // ------------------------------------------------------------------ Vault browser
 function vaultPanel() {
-  const d = shell('Read-only. Click a note to open it; [[links]] inside a note open too.', 'flush');
+  const d = shell('Read-only. Type to filter note names; press Enter to search inside every note in both vaults.', 'flush');
   d.querySelector('.pbody').innerHTML = `<div class="vb"><div class="vb-side"><div class="vb-tabs"></div>
-    <input type="search" placeholder="Filter this vault, or press Enter to search both…"><div class="vb-list"></div></div><div class="vb-note"><div class="empty">Pick a note on the left.</div></div></div>`;
+    <input type="search" placeholder="Filter names…" title="Type to filter this vault by note name. Press Enter to search inside every note in both vaults."><div class="vb-list"></div></div><div class="vb-note"><div class="empty">Pick a note on the left.</div></div></div>`;
   return d;
 }
-const VB = { key: 'brain', files: [], el: null };
+// The tab that is lit, the list on the left and the vault a note is read from
+// must always agree. The old code switched vaults silently on a [[link]] and
+// every note clicked afterwards said "no such note".
+const VB = { key: 'brain', files: [], el: null, load: null, search: null };
 async function openNote(key, path) {
   const el = VB.el; if (!el) return;
   const d = await api(`/api/vault/file?v=${encodeURIComponent(key)}&p=${encodeURIComponent(path)}`);
@@ -189,10 +276,7 @@ async function openNote(key, path) {
   if (d.error) { note.innerHTML = `<div class="empty">${esc(d.error)}</div>`; return; }
   note.innerHTML = `<div class="vb-path">${esc(key === 'crm' ? 'CRM' : 'Second brain')} / ${esc(path)}</div>` + md(d.text);
   el.querySelectorAll('.vb-file').forEach(f => f.classList.toggle('on', f.dataset.p === path));
-}
-function findNote(name) {
-  const n = name.toLowerCase().replace(/\.md$/, '');
-  return VB.files.find(f => f.path.toLowerCase() === n + '.md' || f.path.toLowerCase().endsWith('/' + n + '.md'));
+  const on = el.querySelector('.vb-file.on'); if (on) on.scrollIntoView({ block: 'nearest' });
 }
 async function mountVault(el) {
   VB.el = el;
@@ -205,9 +289,9 @@ async function mountVault(el) {
     VB.files.filter(x => !f || x.path.toLowerCase().includes(f)).slice(0, 1500).forEach(x => {
       const dir = x.path.includes('/') ? x.path.slice(0, x.path.lastIndexOf('/')) : '(top level)';
       if (dir !== last) { h += `<div class="vb-dir">${esc(dir)}</div>`; last = dir; }
-      h += `<div class="vb-file" data-p="${esc(x.path)}">${esc(x.path.split('/').pop().replace(/\.md$/, ''))}</div>`;
+      h += `<button class="vb-file" data-p="${esc(x.path)}">${esc(x.path.split('/').pop().replace(/\.md$/, ''))}</button>`;
     });
-    list.innerHTML = h || '<div class="empty" style="margin:8px">No notes match.</div>';
+    list.innerHTML = h || `<div class="empty" style="margin:8px">No note names contain "${esc(q.value.trim())}". Press Enter to search inside every note in both vaults.</div>`;
   };
   const load = async (key) => {
     VB.key = key;
@@ -216,34 +300,44 @@ async function mountVault(el) {
     VB.files = t.files || [];
     if (t.exists === false) list.innerHTML = '<div class="empty" style="margin:8px">That folder does not exist. Check the path in config.json.</div>'; else draw();
   };
+  const search = async (text) => {
+    q.value = text;
+    const r = await api('/api/vault/search?q=' + encodeURIComponent(text));
+    list.innerHTML = (r.hits || []).map(x => `<div class="vb-hit" data-k="${esc(x.key)}" data-p="${esc(x.path)}"><b>${esc(x.path)}</b> <span class="pill">${esc(x.label)}</span><small>${esc(x.snippet)}</small></div>`).join('') || '<div class="empty" style="margin:8px">Nothing found in either vault.</div>';
+  };
+  VB.load = load; VB.search = search;
   tabs.onclick = e => { const b = e.target.closest('button'); if (b) load(b.dataset.k); };
   list.onclick = e => { const f = e.target.closest('.vb-file'); if (f) openNote(VB.key, f.dataset.p); const h = e.target.closest('.vb-hit'); if (h) { load(h.dataset.k).then(() => openNote(h.dataset.k, h.dataset.p)); } };
   q.oninput = draw;
-  q.onkeydown = async e => {
-    if (e.key !== 'Enter') return;
-    const r = await api('/api/vault/search?q=' + encodeURIComponent(q.value));
-    list.innerHTML = (r.hits || []).map(x => `<div class="vb-hit" data-k="${esc(x.key)}" data-p="${esc(x.path)}"><b>${esc(x.path)}</b> <span class="pill">${esc(x.label)}</span><small>${esc(x.snippet)}</small></div>`).join('') || '<div class="empty" style="margin:8px">Nothing found in either vault.</div>';
-  };
+  q.onkeydown = e => { if (e.key === 'Enter') search(q.value); };
   el.querySelector('.refresh').onclick = () => load(VB.key);
   el.querySelector('.pop').onclick = () => popout('vaults');
   if (vs.length) await load(vs[0].key);
 }
-// Clicking a [[link]] anywhere opens it in the vault browser.
-document.addEventListener('click', async e => {
-  const w = e.target.closest('.wl'); if (!w || !dock) return;
+// Clicking a [[link]] anywhere asks the server which vault has that note (the
+// second brain first, then the CRM), switches the Vaults panel to that vault
+// and opens it there.
+async function followLink(name, prefer) {
   openPanel('vaults');
-  setTimeout(async () => {
-    let f = findNote(w.dataset.note);
-    if (!f && VB.key !== 'brain') { VB.key = 'brain'; }
-    if (f) openNote(VB.key, f.path); else openNote(VB.key, w.dataset.note.endsWith('.md') ? w.dataset.note : w.dataset.note + '.md');
-  }, 150);
+  for (let i = 0; i < 40 && !VB.load; i++) await new Promise(r => setTimeout(r, 50));
+  if (!VB.load) return;
+  const r = await api('/api/vault/resolve?name=' + encodeURIComponent(name) + (prefer ? '&prefer=' + encodeURIComponent(prefer) : ''));
+  if (r.key) { await VB.load(r.key); await openNote(r.key, r.path); return; }
+  const note = $('.vb-note', VB.el);
+  const plain = String(name).split('/').pop().replace(/\.md$/, '');
+  note.innerHTML = `<div class="empty">No note called "${esc(plain)}" in either vault.<br><br><button class="btn small" data-search="${esc(plain)}">Search both vaults for "${esc(plain)}"</button></div>`;
+  note.querySelector('[data-search]').onclick = e => VB.search(e.target.dataset.search);
+}
+document.addEventListener('click', e => {
+  const w = e.target.closest('.wl'); if (!w || !dock) return;
+  followLink(w.dataset.note, w.dataset.vault);
 });
 
 // ------------------------------------------------------------------ Agents
 async function renderAgents(body) {
   const d = await api('/api/agents');
   const looked = d.folders.map(f => `<span class="pill ${f.exists ? 'up' : ''}" title="${esc(f.path)}">${esc(f.label)}${f.exists ? '' : ' · none'}</span>`).join('');
-  if (!d.agents.length) { body.innerHTML = `<div class="empty">No agents found yet. Looked in: ${looked}<br>An agent is a markdown file in one of those folders.</div>`; return; }
+  if (!d.agents.length) { body.innerHTML = `<div class="empty">No agents found yet. An agent is a markdown file in one of these folders:<ul>${d.folders.map(f => `<li><code class="sel">${esc(f.path)}</code> <span class="dim">(${esc(f.label)}${f.exists ? '' : ', folder does not exist yet'})</span></li>`).join('')}</ul></div>`; return; }
   body.innerHTML = `<div class="dim" style="margin-bottom:8px">${d.agents.length} agents · looked in ${looked}</div><div class="agents">` + d.agents.map(a => `
     <div class="agent"><div class="an">${esc(a.name)}</div><div class="ad" title="Click to read it all">${esc(a.description || 'No description written.')}</div>
       <div class="foot"><span class="pill">${esc(a.where)}</span>${a.model ? `<span class="pill">${esc(a.model)}</span>` : ''}<span style="flex:1"></span><button class="btn small ask" data-n="${esc(a.name)}">Ask in chat</button></div></div>`).join('') + '</div>';
@@ -321,26 +415,60 @@ async function mountApp(el, name) {
 }
 
 // ------------------------------------------------------------------ Across everything
-async function renderOverview(body) {
-  const [td, act, tok, ag, ap, ib] = await Promise.all(['/api/today', '/api/activity', '/api/tokens', '/api/agents', '/api/apps', '/api/inbox'].map(p => api(p).catch(() => ({}))));
-  const crmRows = [];
-  if (td.crm && td.crm.found) td.crm.text.split('\n').forEach(l => { const m = l.match(/^\|\s*(\d+)\s*\|\s*([^|]+)\|\s*([^|]+)\|/); if (m) crmRows.push({ who: m[2].trim(), why: m[3].trim() }); });
-  const inboxItems = ib.found ? ib.text.split('\n').filter(l => /^\s*[-*]\s+/.test(l)).slice(0, 4).map(l => l.replace(/^\s*[-*]\s+(\[.\]\s*)?/, '')) : [];
-  const today = (act.sessions || []).filter(s => new Date(s.last_ts * 1000).toDateString() === new Date().toDateString());
-  const card = (t, inner) => `<div class="card"><h3>${t}</h3>${inner}</div>`;
-  body.innerHTML = '<div class="ov">' +
-    card('People to speak to', crmRows.length ? '<ul>' + crmRows.slice(0, 4).map(r => `<li><b>${inline(r.who)}</b> <span class="muted">· ${inline(r.why)}</span></li>`).join('') + '</ul>' + (crmRows.length > 4 ? `<div class="dim">and ${crmRows.length - 4} more in Today</div>` : '') : '<div class="muted">Nobody is waiting on you in the CRM.</div>') +
-    card('Waiting for your decision', inboxItems.length ? '<ul>' + inboxItems.map(x => `<li>${inline(x)}</li>`).join('') + '</ul>' : '<div class="muted">The recommendations file is empty or missing.</div>') +
-    card('Your second brain', td.brain ? `<div class="kv"><span class="muted">Notes moved (3 days)</span><b>${td.brain.moved.length}</b><span class="muted">Left unfinished</span><b>${td.brain.open.length}</b><span class="muted">Daily note today</span><b>${td.brain.daily ? 'yes' : 'no'}</b></div>` : '<div class="muted">Not set.</div>') +
-    card('Claude today', `<div class="kv"><span class="muted">Conversations</span><b>${today.length}</b><span class="muted">Tokens</span><b>${fmt(tok.today && tok.today.total)}</b><span class="muted">Agents you have</span><b>${(ag.agents || []).length}</b></div>` + (today[0] ? `<div class="dim" style="margin-top:6px">Latest: ${esc(today[0].title || today[0].folder_name)}</div>` : '')) +
-    card('Your other apps', Object.entries(ap).map(([k, v]) => `<div><span class="pill ${v.up ? 'up' : 'down'}">${v.up ? 'running' : 'not running'}</span> ${k === 'projectforge' ? 'Work board (ProjectForge)' : k === 'fleetview' ? 'FleetView' : esc(k)}</div>`).join('') || '<div class="muted">None set.</div>') +
-    '</div>';
+// Every card heading opens its panel, every person opens their CRM note, and
+// each card is drawn as soon as its own data arrives: the check on your other
+// apps can take half a second when they are off, and nothing waits for it.
+function crmPeople(text) {
+  const rows = [];
+  String(text || '').split('\n').forEach(l => { const m = l.match(/^\|\s*(\d+)\s*\|\s*([^|]+)\|\s*([^|]+)\|/); if (m) rows.push({ who: m[2].trim(), why: m[3].trim() }); });
+  return rows;
 }
+async function renderOverview(body) {
+  const cards = [
+    ['people', 'today', 'People to speak to'], ['decide', 'inbox', 'Waiting for your decision'],
+    ['brain', 'vaults', 'Your second brain'], ['claude', 'activity', 'Claude today'], ['apps', 'board', 'Your other apps'],
+  ];
+  body.innerHTML = '<div class="ov">' + cards.map(([k, open, t]) => `<div class="card" data-card="${k}"><h3><button class="cardlink" data-open="${open}" title="Open the ${esc(PANELS[open].title)} panel">${esc(t)} ›</button></h3><div class="cbody dim">Reading…</div></div>`).join('') + '</div>';
+  const fill = (k, html) => { const c = body.querySelector(`[data-card="${k}"] .cbody`); if (c) { c.className = 'cbody'; c.innerHTML = html; } };
+  const safe = p => api(p).catch(() => ({}));
+  const jobs = [];
+  jobs.push(safe('/api/today').then(td => {
+    let h;
+    if (!td.crm) h = '<div class="muted">No CRM folder is set in config.json.</div>';
+    else if (!td.crm.found) h = '<div class="muted">Your CRM has no <code>Today.md</code> yet. Build it in your CRM folder with <code>python _engine/today.py --write</code>.</div>';
+    else {
+      const rows = crmPeople(td.crm.text);
+      if (rows.length) h = '<ul>' + rows.slice(0, 4).map(r => `<li><span class="wl" data-vault="crm" data-note="${esc(r.who)}">${esc(r.who)}</span> <span class="muted">· ${inline(r.why)}</span></li>`).join('') + '</ul>' + (rows.length > 4 ? `<button class="cardlink small" data-open="today">and ${rows.length - 4} more in Today ›</button>` : '');
+      else if (/\|/.test(td.crm.text)) h = '<div class="muted"><code>Today.md</code> has no numbered rows (number, name, reason), so no names can be picked out. <button class="cardlink small" data-open="today">Read it in Today ›</button></div>';
+      else h = '<div class="muted">Nobody is waiting on you today.</div>';
+    }
+    fill('people', h);
+    fill('brain', td.brain ? `<div class="kv"><span class="muted">Notes moved (3 days)</span><b>${td.brain.moved.length}</b><span class="muted">Left unfinished</span><b>${td.brain.open.length}</b><span class="muted">Daily note today</span><b>${td.brain.daily ? 'yes' : 'no'}</b></div>` : '<div class="muted">No second brain is set in config.json.</div>');
+  }));
+  jobs.push(safe('/api/inbox').then(ib => {
+    if (!ib.found) { fill('decide', `<div class="muted">No Recommendations file yet. Create <code>${esc((ib.looked_for || ['Inbox/Recommendations.md'])[0])}</code> in your second brain.</div>`); return; }
+    const all = ib.text.split('\n').filter(l => /^\s*[-*]\s+/.test(l) && !/^\s*[-*]\s+\[[xX]\]/.test(l)).map(l => l.replace(/^\s*[-*]\s+(\[.\]\s*)?/, ''));
+    fill('decide', all.length ? '<ul>' + all.slice(0, 4).map(x => `<li><span class="cardlink plain" role="button" tabindex="0" data-open="inbox">${inline(x)}</span></li>`).join('') + '</ul>' + (all.length > 4 ? `<button class="cardlink small" data-open="inbox">and ${all.length - 4} more ›</button>` : '') : '<div class="muted">The Recommendations file is there, with nothing waiting in it.</div>');
+  }));
+  jobs.push(Promise.all([safe('/api/activity'), safe('/api/tokens'), safe('/api/agents')]).then(([act, tok, ag]) => {
+    const today = (act.sessions || []).filter(s => new Date(s.last_ts * 1000).toDateString() === new Date().toDateString());
+    fill('claude', `<div class="kv"><span class="muted">Conversations</span><b>${today.length}</b><span class="muted">Tokens</span><b>${fmt(tok.today && tok.today.total)}</b><span class="muted">Agents you have</span><b><button class="cardlink plain" data-open="agents">${(ag.agents || []).length}</button></b></div>` + (today[0] ? `<div class="dim" style="margin-top:6px">Latest: ${esc(today[0].title || today[0].folder_name)}</div>` : ''));
+  }));
+  fill('apps', '<div class="dim">Checking…</div>');
+  jobs.push(safe('/api/apps').then(ap => {
+    fill('apps', Object.entries(ap).map(([k, v]) => `<div><span class="pill ${v.up ? 'up' : 'down'}">${v.up ? 'running' : 'not running'}</span> <button class="cardlink plain" data-open="${k === 'fleetview' ? 'fleet' : 'board'}">${k === 'projectforge' ? 'Work board (ProjectForge)' : k === 'fleetview' ? 'FleetView' : esc(k)}</button></div>`).join('') || '<div class="muted">None set in config.json.</div>');
+  }));
+  await Promise.all(jobs);
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.ov [data-open], .dv-watermark-jeeves [data-open]'); if (!b) return;
+  openPanel(b.dataset.open);
+});
 
 // ------------------------------------------------------------------ the dock
 const PANELS = {
   chat:     { title: 'Chat',               make: chatPanel, mount: el => mountChat(el) },
-  overview: { title: 'Across everything',  make: () => shell('What is moving across your CRM, notes, agents and apps'), render: renderOverview },
+  overview: { title: 'Across everything',  make: () => shell('What is moving across your CRM, notes, agents and apps. Click a heading to open its panel.'), render: renderOverview },
   today:    { title: 'Today',              make: () => shell('Your CRM’s Today.md and your second brain’s day'), render: renderToday },
   inbox:    { title: 'Recommendations',    make: () => shell('A markdown file in your second brain that you and your agents write to'), render: renderInbox },
   vaults:   { title: 'Vaults',             make: vaultPanel, mount: el => mountVault(el) },
@@ -367,26 +495,104 @@ function mount(name, el) {
 }
 
 let dock = null;
+// A closed panel comes back next to the panels it normally sits with, not in
+// whichever group you clicked last.
+const NEIGHBOURS = {
+  chat: [], overview: ['tokens', 'today'], today: ['inbox', 'overview'], inbox: ['today', 'overview'],
+  vaults: ['agents', 'board', 'fleet', 'today'], agents: ['vaults', 'board', 'fleet'], board: ['vaults', 'agents', 'fleet'],
+  fleet: ['vaults', 'agents', 'board'], tokens: ['activity', 'overview'], activity: ['tokens', 'overview'],
+};
 function openPanel(name) {
   if (!dock || !PANELS[name]) return;
   const ex = dock.getPanel(name);
-  if (ex) { ex.api.setActive(); return; }
-  dock.addPanel({ id: name, component: name, title: PANELS[name].title });
+  if (ex) { if (dock.hasMaximizedGroup && dock.hasMaximizedGroup() && !(ex.api.isMaximized && ex.api.isMaximized())) dock.exitMaximizedGroup(); ex.api.setActive(); return; }
+  const near = (NEIGHBOURS[name] || []).find(n => dock.getPanel(n));
+  let position;
+  if (near) position = { referencePanel: near, direction: 'within' };
+  else if (name === 'chat' && dock.panels.length) position = { referencePanel: dock.panels[0].id, direction: 'left' };
+  dock.addPanel(Object.assign({ id: name, component: name, title: PANELS[name].title }, position ? { position } : {}));
 }
-function defaultLayout() {
-  dock.addPanel({ id: 'chat', component: 'chat', title: PANELS.chat.title });
-  dock.addPanel({ id: 'today', component: 'today', title: PANELS.today.title, position: { referencePanel: 'chat', direction: 'right' } });
-  dock.addPanel({ id: 'inbox', component: 'inbox', title: PANELS.inbox.title, position: { referencePanel: 'today', direction: 'within' }, inactive: true });
-  dock.addPanel({ id: 'overview', component: 'overview', title: PANELS.overview.title, position: { referencePanel: 'today', direction: 'right' } });
-  dock.addPanel({ id: 'tokens', component: 'tokens', title: PANELS.tokens.title, position: { referencePanel: 'overview', direction: 'below' } });
-  dock.addPanel({ id: 'activity', component: 'activity', title: PANELS.activity.title, position: { referencePanel: 'tokens', direction: 'within' }, inactive: true });
-  dock.addPanel({ id: 'vaults', component: 'vaults', title: PANELS.vaults.title, position: { referencePanel: 'today', direction: 'below' } });
-  dock.addPanel({ id: 'agents', component: 'agents', title: PANELS.agents.title, position: { referencePanel: 'vaults', direction: 'within' }, inactive: true });
-  dock.addPanel({ id: 'board', component: 'board', title: PANELS.board.title, position: { referencePanel: 'vaults', direction: 'within' }, inactive: true });
-  dock.addPanel({ id: 'fleet', component: 'fleet', title: PANELS.fleet.title, position: { referencePanel: 'vaults', direction: 'within' }, inactive: true });
-  try { dock.getPanel('today').api.setActive(); dock.getPanel('vaults').api.setActive(); dock.getPanel('tokens').api.setActive(); } catch (e) {}
+
+// ---- layouts. Every layout has all 10 panels; only where they sit changes.
+const add = (id, ref, dir, inactive) => dock.addPanel(Object.assign({ id, component: id, title: PANELS[id].title }, ref ? { position: { referencePanel: ref, direction: dir } } : {}, inactive ? { inactive: true } : {}));
+const size = (id, s) => { try { dock.getPanel(id).group.api.setSize(s); } catch (e) {} };
+const activate = ids => ids.forEach(i => { try { dock.getPanel(i).api.setActive(); } catch (e) {} });
+const LAYOUTS = {
+  standard: {
+    title: 'Big screen', note: 'Chat, Today, Across everything and Tokens side by side',
+    build() {
+      add('chat');
+      add('today', 'chat', 'right'); add('inbox', 'today', 'within', true);
+      add('overview', 'today', 'right');
+      add('tokens', 'overview', 'below'); add('activity', 'tokens', 'within', true);
+      add('vaults', 'today', 'below'); ['agents', 'board', 'fleet'].forEach(p => add(p, 'vaults', 'within', true));
+      activate(['today', 'vaults', 'tokens']);
+    },
+  },
+  laptop: {
+    title: 'Laptop', note: 'Chat on the left; 1 tall stack of tabs on the right; a short row below',
+    build() {
+      add('chat');
+      add('overview', 'chat', 'right'); ['today', 'inbox', 'vaults'].forEach(p => add(p, 'overview', 'within', true));
+      add('tokens', 'overview', 'below'); ['activity', 'agents', 'board', 'fleet'].forEach(p => add(p, 'tokens', 'within', true));
+      activate(['overview', 'tokens']);
+      size('chat', { width: Math.round(innerWidth * 0.42) });
+      size('tokens', { height: Math.round((innerHeight - 50) * 0.32) });
+    },
+  },
+  chatfocus: {
+    title: 'Chat focus', note: 'A wide Chat; every other panel as tabs beside it',
+    build() {
+      add('chat');
+      add('overview', 'chat', 'right'); ['today', 'inbox', 'vaults', 'agents', 'activity', 'tokens', 'board', 'fleet'].forEach(p => add(p, 'overview', 'within', true));
+      activate(['overview']);
+      size('chat', { width: Math.round(innerWidth * 0.62) });
+    },
+  },
+  morning: {
+    title: 'Morning review', note: 'Across everything first, then Today, then Chat',
+    build() {
+      add('overview');
+      add('today', 'overview', 'right'); add('inbox', 'today', 'within', true);
+      add('chat', 'today', 'right');
+      add('vaults', 'overview', 'below'); ['agents', 'tokens', 'activity', 'board', 'fleet'].forEach(p => add(p, 'vaults', 'within', true));
+      activate(['today', 'vaults']);
+    },
+  },
+};
+const LKEY = 'jeeves.layout.v1', SKEY = 'jeeves.layouts.saved';
+const defaultLayoutName = () => (innerWidth < 1440 ? 'laptop' : 'standard');
+function applyLayout(name) {
+  const saved = savedLayouts();
+  try { if (dock.hasMaximizedGroup && dock.hasMaximizedGroup()) dock.exitMaximizedGroup(); } catch (e) {}
+  try { dock.clear(); } catch (e) {}
+  if (LAYOUTS[name]) LAYOUTS[name].build();
+  else if (saved[name]) { try { dock.fromJSON(saved[name]); } catch (e) { LAYOUTS[defaultLayoutName()].build(); } }
+  // A saved layout from an older copy may miss a panel: nothing is ever lost.
+  Object.keys(PANELS).forEach(p => { if (!dock.getPanel(p)) openPanel(p); });
 }
-const LKEY = 'jeeves.layout.v1';
+function savedLayouts() { try { return JSON.parse(localStorage.getItem(SKEY) || '{}'); } catch (e) { return {}; } }
+
+function watermark() {
+  const el = document.createElement('div');
+  el.className = 'dv-watermark-jeeves';
+  el.innerHTML = `<div><b>No panels open.</b> Bring one back, or put every panel back where it started.</div>
+    <div class="wm-row">${Object.entries(PANELS).map(([k, p]) => `<button class="btn small" data-open="${k}">${esc(p.title)}</button>`).join('')}</div>
+    <div><button class="btn" data-reset="1">Reset layout</button></div>`;
+  el.querySelector('[data-reset]').onclick = () => applyLayout(defaultLayoutName());
+  return { element: el, init() {}, dispose() {} };
+}
+function maxButton() {
+  const el = document.createElement('div');
+  el.className = 'grp-actions';
+  el.innerHTML = '<button class="maxb" title="Make this group fill the screen (or double-click a tab). Esc puts it back.">⤢</button>';
+  let group = null;
+  el.querySelector('.maxb').onclick = e => {
+    e.stopPropagation(); if (!group) return;
+    if (group.api.isMaximized()) group.api.exitMaximized(); else group.api.maximize();
+  };
+  return { element: el, init(params) { group = params.group; }, dispose() {} };
+}
 
 async function start() {
   try { CFG = Object.assign(CFG, await api('/api/config')); } catch (e) {}
@@ -399,12 +605,13 @@ async function start() {
   try { const m = localStorage.getItem('jeeves.model'); if (m && CFG.models[m]) sel.value = m; } catch (e) {}
   sel.onchange = () => { try { localStorage.setItem('jeeves.model', sel.value); } catch (e) {} };
   if (window.JeevesOrb) orbTop = window.JeevesOrb($('#orb-top'), CFG.orb || {});
-  if (!CFG.claude_found) setStatus('Claude Code was not found on this computer, so Chat cannot answer. Every other panel works.');
+  if (CFG.claude_found === false) setStatus('Claude Code was not found on this computer, so Chat cannot answer. Every other panel works.');
 
-  dock = createDockview($('#dock'), {
-    createComponent: (o) => { const element = build(o.name); return { element, init: () => mount(o.name, element) }; },
-  });
   const solo = new URLSearchParams(location.search).get('only');
+  dock = createDockview($('#dock'), Object.assign({
+    createComponent: (o) => { const element = build(o.name); return { element, init: () => mount(o.name, element) }; },
+    createWatermarkComponent: watermark,
+  }, solo ? {} : { createRightHeaderActionComponent: maxButton }));
   if (solo && PANELS[solo]) {
     document.body.classList.add('solo');
     document.title = CFG.name + ' · ' + PANELS[solo].title;
@@ -412,17 +619,50 @@ async function start() {
   } else {
     let restored = false;
     try { const saved = localStorage.getItem(LKEY); if (saved) { dock.fromJSON(JSON.parse(saved)); restored = dock.panels.length > 0; } } catch (e) { restored = false; }
-    if (!restored) { try { dock.clear(); } catch (e) {} defaultLayout(); }
+    if (!restored) applyLayout(defaultLayoutName());
     dock.onDidLayoutChange(() => { try { localStorage.setItem(LKEY, JSON.stringify(dock.toJSON())); } catch (e) {} });
+    // Double-click a tab to make its group fill the screen; again (or Esc) to put it back.
+    $('#dock').addEventListener('dblclick', e => {
+      if (!e.target.closest('.dv-tab')) return;
+      const g = dock.activeGroup; if (!g) return;
+      if (g.api.isMaximized()) g.api.exitMaximized(); else g.api.maximize();
+    });
   }
 
-  // + Panel: nothing is ever gone for good.
+  // + Panel: nothing is ever gone for good. Open panels are marked "(open)".
   const menu = $('#add-menu');
-  menu.innerHTML = Object.entries(PANELS).map(([k, p]) => `<div class="row"><button data-open="${k}">+ ${esc(p.title)}</button><button class="pop" data-pop="${k}" title="Pop out">⧉</button></div>`).join('');
-  menu.onclick = e => { const o = e.target.dataset.open, p = e.target.dataset.pop; if (o) openPanel(o); if (p) popout(p); menu.classList.remove('open'); e.stopPropagation(); };
-  $('#add-btn').onclick = e => { e.stopPropagation(); menu.classList.toggle('open'); };
-  document.addEventListener('click', () => menu.classList.remove('open'));
-  $('#reset-btn').onclick = () => { try { localStorage.removeItem(LKEY); } catch (e) {} location.reload(); };
+  const drawMenu = () => {
+    menu.innerHTML = Object.entries(PANELS).map(([k, p]) => `<div class="row"><button data-open="${k}">+ ${esc(p.title)}${dock.getPanel(k) ? ' <span class="dim">(open)</span>' : ''}</button><button class="pop" data-pop="${k}" title="Pop out into its own window">⧉</button></div>`).join('');
+  };
+  menu.onclick = e => { const b = e.target.closest('button'); if (!b) return; const o = b.dataset.open, p = b.dataset.pop; if (o) openPanel(o); if (p) popout(p); menu.classList.remove('open'); e.stopPropagation(); };
+  $('#add-btn').onclick = e => { e.stopPropagation(); lmenu.classList.remove('open'); drawMenu(); menu.classList.toggle('open'); };
+
+  // Layouts: 4 ready-made arrangements plus any you save. All keep all 10 panels.
+  const lmenu = $('#layout-menu');
+  const drawLayouts = () => {
+    const saved = Object.keys(savedLayouts());
+    lmenu.innerHTML = Object.entries(LAYOUTS).map(([k, l]) => `<div class="row"><button data-layout="${k}"><b>${esc(l.title)}</b><br><span class="dim">${esc(l.note)}</span></button></div>`).join('') +
+      (saved.length ? '<div class="sep">Saved by you</div>' + saved.map(n => `<div class="row"><button data-layout="${esc(n)}">${esc(n)}</button><button class="pop" data-forget="${esc(n)}" title="Forget this saved layout">×</button></div>`).join('') : '') +
+      '<div class="sep"></div><div class="row"><button data-save="1">Save this layout as…</button></div>';
+  };
+  lmenu.onclick = e => {
+    const b = e.target.closest('button'); if (!b) return; e.stopPropagation();
+    if (b.dataset.layout) applyLayout(b.dataset.layout);
+    if (b.dataset.forget) { const s = savedLayouts(); delete s[b.dataset.forget]; try { localStorage.setItem(SKEY, JSON.stringify(s)); } catch (x) {} drawLayouts(); return; }
+    if (b.dataset.save) {
+      const n = (prompt('Name for this layout, for example "Client prep":') || '').trim();
+      if (n && !LAYOUTS[n]) { const s = savedLayouts(); s[n] = dock.toJSON(); try { localStorage.setItem(SKEY, JSON.stringify(s)); } catch (x) {} setStatus('Saved the layout "' + n + '".'); }
+    }
+    lmenu.classList.remove('open');
+  };
+  $('#layout-btn').onclick = e => { e.stopPropagation(); menu.classList.remove('open'); drawLayouts(); lmenu.classList.toggle('open'); };
+  document.addEventListener('click', () => { menu.classList.remove('open'); lmenu.classList.remove('open'); });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    menu.classList.remove('open'); lmenu.classList.remove('open');
+    try { if (dock.hasMaximizedGroup()) dock.exitMaximizedGroup(); } catch (x) {}
+  });
+  $('#reset-btn').onclick = () => applyLayout(defaultLayoutName());
 
   // Reading local files costs no tokens, so the reading panels refresh once a
   // minute while this tab is visible. Nothing here ever starts Claude on a timer.

@@ -7,12 +7,21 @@
     python start.py --port 4041
 
 It listens on 127.0.0.1 only: this computer, never your network.
+
+Only 1 copy runs per port. Start it a second time and it says it is already
+running (and opens the page) instead of starting another copy.
+
+--stop asks the port first whether Jeeves is really there, and ends only the
+program that answers. The old way trusted the number saved in state/jeeves.pid;
+after a restart that number can belong to any other program on the computer.
 """
 
 import argparse
+import json
 import os
-import signal
 import sys
+import time
+import urllib.request
 
 import webbrowser
 from pathlib import Path
@@ -21,6 +30,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from jeeves import config as C  # noqa: E402
+from jeeves import proc as P  # noqa: E402
 from jeeves.server import make_server  # noqa: E402
 
 
@@ -28,22 +38,47 @@ def pid_file():
     return C.state_dir() / "jeeves.pid"
 
 
-def stop():
+def who_is_on(port):
+    """What answers on this port: Jeeves's health reply (with its process number), or None."""
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:%d/api/health" % int(port), timeout=2) as r:
+            d = json.loads(r.read().decode("utf-8"))
+        return d if d.get("app") == "jeeves" and d.get("pid") else None
+    except Exception:  # noqa: BLE001 - nothing there, or not Jeeves
+        return None
+
+
+def stop(config_file=None):
     p = pid_file()
-    if not p.exists():
-        print("  Jeeves is not running (no record of it).")
-        return 0
+    ports = []
+    if p.exists():
+        try:
+            parts = p.read_text().split()
+            ports.append(int(parts[1]))
+        except (OSError, ValueError, IndexError):
+            pass
+    cfg_port = C.load(config_file).get("port", 4040)
+    if cfg_port not in ports:
+        ports.append(cfg_port)
+    stopped = 0
+    for port in ports:
+        h = who_is_on(port)
+        if not h:
+            continue
+        P.kill_tree(h["pid"])
+        for _ in range(50):
+            if not P.alive(h["pid"]):
+                break
+            time.sleep(0.1)
+        print("  Stopped Jeeves on port %d (process %d)." % (port, h["pid"]))
+        stopped += 1
+    if not stopped:
+        print("  Jeeves is not running (nothing answered on port %s)."
+              % " or ".join(str(x) for x in ports))
     try:
-        pid = int(p.read_text().split()[0])
-    except (OSError, ValueError, IndexError):
-        p.unlink(missing_ok=True)
-        return 0
-    try:
-        os.kill(pid, signal.SIGTERM)
-        print("  Stopped Jeeves (process %d)." % pid)
+        p.unlink()
     except OSError:
-        print("  Jeeves was not running any more.")
-    p.unlink(missing_ok=True)
+        pass
     return 0
 
 
@@ -54,9 +89,9 @@ def main(argv=None):
     ap.add_argument("--no-open", action="store_true", help="do not open a browser")
     ap.add_argument("--stop", action="store_true", help="stop the running copy")
     a = ap.parse_args(argv)
-    if a.stop:
-        return stop()
     cfg_file = a.config or os.environ.get("JEEVES_CONFIG")
+    if a.stop:
+        return stop(cfg_file)
     cfg = C.load(cfg_file)
     if not cfg.get("second_brain"):
         print("  No config.json yet. Run:  python install.py")
@@ -64,8 +99,21 @@ def main(argv=None):
     try:
         srv = make_server(a.port, cfg_file)
     except OSError as exc:
-        print("  Could not listen on port %s: %s" % (a.port or cfg.get("port"), exc))
-        print("  Something else is using it. Try:  python start.py --port 4041")
+        port = a.port or cfg.get("port")
+        h = who_is_on(port)
+        if h:
+            url = "http://127.0.0.1:%d/" % int(port)
+            print("  Jeeves is already running at %s (process %d). Not starting a second copy."
+                  % (url, h["pid"]))
+            print("  To stop it:  python start.py --stop")
+            if not a.no_open:
+                try:
+                    webbrowser.open(url)
+                except Exception:  # noqa: BLE001
+                    pass
+            return 0
+        print("  Could not listen on port %s: %s" % (port, exc))
+        print("  Another program is using it. Try:  python start.py --port 4041")
         return 1
     port = srv.server_address[1]
     C.atomic_write(pid_file(), "%d %d\n" % (os.getpid(), port))

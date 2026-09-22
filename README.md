@@ -10,7 +10,7 @@ dock, stack as tabs, close, bring back and pop out onto another screen:
 | Panel | What it shows |
 |---|---|
 | Chat | Your own Claude Code, working in your second brain with your CRM added. Replies stream in word by word. Model picker: best, deep, fast. |
-| Today | Your CRM's `Today.md` (made by CRM Layer 7) and your second brain's day: today's daily note if you keep one, notes that moved in the last 3 days, unticked boxes. |
+| Today | Your CRM's `Today.md` (the daily ranked list from part 7 of the CRM series) and your second brain's day: today's daily note if you keep one, notes that moved in the last 3 days, unticked boxes. |
 | Across everything | One screen that sums up what is moving: people to speak to, decisions waiting, notes moved, Claude use today, your other apps. |
 | Recommendations | A markdown file in your second brain (`Inbox/Recommendations.md` by default) that you and your agents write to. |
 | Vaults | Both vaults, read-only. Filter, search both, click `[[links]]`. |
@@ -44,20 +44,32 @@ hidden when you log in; the answer defaults to no.
 ## Start and stop
 
 ```
-python start.py            # opens http://127.0.0.1:4040/
-python start.py --stop
+python start.py            # opens http://127.0.0.1:4040/ ; Ctrl+C in that terminal stops it
+python start.py --stop     # stops a copy started any other way
 ```
 
 On Windows the installer also makes `Start Jeeves (hidden).vbs`: double-click
-it to start Jeeves with no window at all.
+it to start Jeeves with no window at all. It does not open your browser: go to
+http://127.0.0.1:4040/ yourself. Only 1 copy runs per port: starting it again
+just says it is already running.
+
+**Layouts** (top bar) switches between 4 arrangements of all 10 panels (Big
+screen, Laptop, Chat focus, Morning review) and saves your own. Double-click a
+tab, or press the corner arrow of a group, to make it fill the screen; Esc
+puts it back.
 
 ## What it will not do
 
 - It never listens on your network: 127.0.0.1 only.
 - It never writes to your vaults. The vault panels only read.
 - It never runs Claude on a timer. Claude runs when you press Send, and at no other time.
-- By default Claude may read but not change files (`"permission_mode": "dontAsk"`).
-  Change that in `config.json` when you decide to (`"acceptEdits"` lets it edit notes).
+- By default Chat can read and search your 2 vaults and nothing else: Jeeves
+  passes Claude Code a list of blocked tools (running commands, PowerShell,
+  writing or editing files, notebooks, fetching web pages, web search), so even
+  a tool you allowed in your own Claude Code settings is not used here. To let
+  Chat act, set `"allow_actions": true` in `config.json` and choose a
+  `"permission_mode"` (`"acceptEdits"` lets it edit notes). Every setting is
+  described in `guide/GUIDE.md`, section "Every command and setting".
 
 ## Tests
 

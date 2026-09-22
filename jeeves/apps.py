@@ -15,7 +15,7 @@ import urllib.request
 _CACHE = {}
 
 
-def probe(url, timeout=0.8):
+def probe(url, timeout=0.5):
     hit = _CACHE.get(url)
     if hit and time.time() - hit[0] < 10:
         return hit[1]

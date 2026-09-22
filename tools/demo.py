@@ -178,6 +178,10 @@ def main():
     cfg = build(a.folder, a.port)
     print(cfg)
     if a.serve:
+        # The demo keeps its own working files, so it never touches your real
+        # Jeeves's conversation or its record of which copy is running.
+        import os
+        os.environ.setdefault("JEEVES_STATE", str(Path(a.folder).resolve() / "state"))
         sys.path.insert(0, str(ROOT))
         from start import main as start_main
         return start_main(["--config", str(cfg), "--no-open"])

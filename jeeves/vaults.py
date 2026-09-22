@@ -59,6 +59,35 @@ def tree(cfg, key):
     return {"key": key, "label": label, "exists": True, "files": files}
 
 
+def resolve(cfg, name, prefer=None):
+    """Which vault holds the note a [[link]] names: the second brain first, then the CRM.
+
+    A link is a note name ("Tom Reyes"), sometimes with a folder ("People/Tom Reyes")
+    or a heading ("Tom Reyes#Calls"). Returns {"key", "path"}, both None if no vault has it.
+    """
+    n = (name or "").split("#")[0].split("|")[0].strip().replace("\\", "/").lower()
+    if n.endswith(".md"):
+        n = n[:-3]
+    if not n:
+        return {"key": None, "path": None}
+    # prefer="crm" looks in the CRM first: a person picked from the CRM's own list.
+    order = sorted(C.vaults(cfg), key=lambda v: v[0] != prefer)
+    for key, _label, root in order:
+        if not root.is_dir():
+            continue
+        best = None
+        for _p, rel in _md_files(root):
+            r = rel.as_posix()
+            low = r.lower()[:-3]
+            if low == n:
+                return {"key": key, "path": r}
+            if best is None and (low.endswith("/" + n) or low.rsplit("/", 1)[-1] == n):
+                best = r
+        if best:
+            return {"key": key, "path": best}
+    return {"key": None, "path": None}
+
+
 def safe_path(root, rel):
     """The file `rel` inside `root`, or None if it would escape the vault."""
     try:

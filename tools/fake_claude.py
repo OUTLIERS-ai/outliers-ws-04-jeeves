@@ -21,6 +21,30 @@ if os.environ.get("FAKE_CLAUDE_FAIL"):
     sys.stderr.write("fake failure for the test\n")
     sys.exit(3)
 
+# Claude Code reports some failures as a finished run marked as an error, for
+# example "Not logged in" or "No conversation found with session ID ...".
+if os.environ.get("FAKE_CLAUDE_RESULT_ERROR"):
+    text = os.environ["FAKE_CLAUDE_RESULT_ERROR"]
+    sys.stdout.write(json.dumps({"type": "assistant", "message": {"content": [
+        {"type": "text", "text": text}]}}) + "\n")
+    sys.stdout.write(json.dumps({"type": "result", "subtype": "success", "is_error": True,
+                                 "result": text}) + "\n")
+    sys.stdout.flush()
+    sys.exit(1)
+
+# An npm install runs claude.cmd, which starts the real Claude as a CHILD program.
+# FAKE_CLAUDE_CHILD=<file> copies that shape: the work runs in a child that writes
+# its process number to <file> and keeps working, so a test can check Stop ends it.
+if os.environ.get("FAKE_CLAUDE_CHILD"):
+    import subprocess
+    code = ("import os,sys,time\n"
+            "open(sys.argv[1],'w').write(str(os.getpid()))\n"
+            "time.sleep(60)\n")
+    child = subprocess.Popen([sys.executable, "-c", code, os.environ["FAKE_CLAUDE_CHILD"]],
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    child.wait()
+    sys.exit(0)
+
 reply = os.environ.get("FAKE_CLAUDE_REPLY") or (
     "Three people are worth your morning, in this order:\n\n"
     "1. **Priya Shah** (Priya Shah Design) replied yesterday asking about month-end help. "

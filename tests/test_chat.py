@@ -66,7 +66,8 @@ def test_missing_claude_code_is_explained(tmp_path):
     cfg = config.load(str(tmp_path / "none.json"))
     cfg["claude_command"] = "definitely-not-a-real-program-xyz"
     ev = list(chat.stream(cfg, "hello"))
-    assert ev == [{"type": "error", "text": ev[0]["text"]}] and "not found" in ev[0]["text"]
+    assert len(ev) == 1 and ev[0]["type"] == "error" and ev[0]["code"] == "not_found"
+    assert "not found" in ev[0]["text"]
 
 
 def test_empty_message_never_starts_claude(tmp_path, monkeypatch):

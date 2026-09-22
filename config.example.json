@@ -9,6 +9,7 @@
   "models": {"best": "opus", "deep": "sonnet", "fast": "haiku"},
   "default_model": "best",
   "permission_mode": "dontAsk",
+  "allow_actions": false,
   "chat_timeout_seconds": 600,
   "inbox_file": "Inbox/Recommendations.md",
   "daily_note_folders": ["Daily", "Daily Notes", "Journal", "Diary", "Calendar"],

@@ -12,12 +12,16 @@ Three guards, each with a reason:
   chat message. Without it, any website open in your browser could quietly ask
   your Claude Code to do work.
 - Read-only vault routes: nothing here writes to your vaults.
+- 1 copy per port: on Windows a normal server socket lets a second program
+  listen on the same port as the first, so 2 copies of Jeeves could both
+  answer on 4040. The socket here asks Windows for the port to itself.
 
 Routes (all GET unless marked):
   /                     the cockpit            /api/today      CRM Today.md + day in the second brain
   /api/config           safe settings          /api/vaults     both vaults
   /api/vault/tree       notes in a vault       /api/vault/file one note
   /api/vault/search     search both vaults     /api/agents     your agents
+  /api/vault/resolve    which vault a [[link]] is in             /api/health     "this is Jeeves"
   /api/activity         recent Claude sessions /api/tokens     today's tokens
   /api/apps             board + FleetView up?  /api/inbox      recommendations file
   POST /api/chat        stream a reply         POST /api/chat/stop, /api/chat/new
@@ -25,6 +29,8 @@ Routes (all GET unless marked):
 
 import json
 import mimetypes
+import os
+import socket
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -92,7 +98,8 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/static/"):
                 return self._static(path[len("/static/"):])
             if path == "/api/health":
-                return self._json({"ok": True})
+                return self._json({"ok": True, "app": "jeeves", "pid": os.getpid(),
+                                   "port": self.server.server_address[1]})
             if path == "/api/config":
                 return self._json(public_config(cfg))
             if path == "/api/vaults":
@@ -101,6 +108,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(vaults.tree(cfg, q.get("v", "brain")))
             if path == "/api/vault/file":
                 return self._json(vaults.read(cfg, q.get("v", "brain"), q.get("p", "")))
+            if path == "/api/vault/resolve":
+                return self._json(vaults.resolve(cfg, q.get("name", ""), q.get("prefer")))
             if path == "/api/vault/search":
                 return self._json(vaults.search(cfg, q.get("q", "")))
             if path == "/api/today":
@@ -180,14 +189,32 @@ def public_config(cfg):
         "apps": cfg.get("apps"),
         "orb": cfg.get("orb"),
         "claude_found": chat.resolve_command(cfg) is not None,
+        "read_only": chat.read_only(cfg),
+        "chat_updated": chat.last_updated("main"),
+        "chat_timeout_seconds": cfg.get("chat_timeout_seconds"),
     }
+
+
+class JeevesServer(ThreadingHTTPServer):
+    """The standard server, but the port is this program's alone.
+
+    http.server turns on SO_REUSEADDR, and on Windows that lets a second program
+    bind the same port while the first still listens (on Mac and Linux it does
+    not). So on Windows: no reuse, and SO_EXCLUSIVEADDRUSE.
+    """
+    daemon_threads = True
+    allow_reuse_address = os.name != "nt"
+
+    def server_bind(self):
+        if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 def make_server(port=None, config_file=None, verbose=False):
     cfg = C.load(config_file)
     port = int(port if port is not None else cfg.get("port", 4040))
-    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    srv.daemon_threads = True
+    srv = JeevesServer(("127.0.0.1", port), Handler)
     srv.config_file = config_file
     srv.verbose = verbose
     return srv

@@ -9,8 +9,10 @@ token use and your other apps, each in a panel you can move, tab and pop out.
     python install.py
 
 It asks where your second brain, your CRM and your agents are, checks Claude
-Code is installed, and writes one file: config.json, next to this one. Running
-it again changes nothing unless you give a different answer.
+Code is installed, and writes config.json next to this file. On Windows it also
+writes "Start Jeeves (hidden).vbs" here, and when an answer changes it keeps
+the old settings as config.json.bak-<date>. Running it again with the same
+answers changes nothing.
 
     python install.py --uninstall     removes the logon launcher, if it made one
 
@@ -138,6 +140,14 @@ def vbs_text():
             'sh.Run "%s", 0, False\n') % (HERE, cmd.replace('"', '""'))
 
 
+def mac_path():
+    """A logon job on a Mac starts with almost no PATH, so Claude Code would not be found.
+    Give it the folders Claude Code's installers use, then the usual system ones."""
+    h = str(home())
+    return ":".join([h + "/.local/bin", h + "/.claude/local", "/opt/homebrew/bin",
+                     "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"])
+
+
 def plist_text():
     return """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -146,9 +156,11 @@ def plist_text():
   <key>ProgramArguments</key><array>
     <string>%s</string><string>%s</string><string>--no-open</string></array>
   <key>WorkingDirectory</key><string>%s</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>%s</string></dict>
   <key>RunAtLoad</key><true/>
 </dict></plist>
-""" % (sys.executable, HERE / "start.py", HERE)
+""" % (sys.executable, HERE / "start.py", HERE, mac_path())
 
 
 def install_launcher():
@@ -186,9 +198,10 @@ def hidden_start_file():
         return None
     target = CONFIG.parent / "Start Jeeves (hidden).vbs"
     text = vbs_text()
-    if not (target.exists() and target.read_text(encoding="utf-8") == text):
-        atomic_write(target, text)
-    return target
+    if target.exists() and target.read_text(encoding="utf-8") == text:
+        return target, False
+    atomic_write(target, text)
+    return target, True
 
 
 # ------------------------------------------------------------------ main
@@ -276,7 +289,18 @@ def main(argv=None):
     default_agents = (old.get("agents_dirs") or [str(claude_home() / "agents")])[0]
     agents = a.agents or ask("Where are your agents?", default_agents, a)
     agents = str(Path(os.path.expanduser(agents)).resolve()) if agents else ""
-    port = a.port or int(ask("Which port should Jeeves use?", str(old.get("port", 4040)), a))
+    port = a.port
+    while not port:
+        got = ask("Which port should Jeeves use?", str(old.get("port", 4040)), a)
+        try:
+            port = int(got)
+            if not 1024 <= port <= 65535:
+                raise ValueError
+        except ValueError:
+            port = None
+            say("Please type a number between 1024 and 65535, for example 4040.")
+            if a.yes:
+                return 1
 
     # 3. Nice to have, never required.
     say("", "Optional extras:")
@@ -300,6 +324,7 @@ def main(argv=None):
     cfg.setdefault("models", {"best": "opus", "deep": "sonnet", "fast": "haiku"})
     cfg.setdefault("default_model", "best")
     cfg.setdefault("permission_mode", "dontAsk")
+    cfg.setdefault("allow_actions", False)
     cfg.setdefault("claude_command", "claude")
     cfg.setdefault("apps", {
         "projectforge": {"url": "http://127.0.0.1:3020",
@@ -319,7 +344,9 @@ def main(argv=None):
 
     hs = hidden_start_file()
     if hs:
-        say("Made %s - double-click it to start Jeeves with no window." % hs.name)
+        say(("Made %s - double-click it to start Jeeves with no window." if hs[1] else
+             "%s is already in place (double-click it to start Jeeves with no window).")
+            % hs[0].name)
 
     # 5. Start at logon? Off unless you say yes.
     if a.launcher or yes("Start Jeeves hidden every time you log in?", False, a):
@@ -332,6 +359,9 @@ def main(argv=None):
         "    python start.py", "",
         "Your browser opens http://127.0.0.1:%d/ . You should see the orb top left," % port,
         "Chat on the left, Today in the middle and your agents in a tab below it.",
+        "Leave the terminal open while you use it; Ctrl+C in it stops Jeeves.",
+        "Chat can read your 2 vaults. It cannot run commands, change files or use",
+        "the internet unless you set \"allow_actions\": true in config.json.",
         "Nothing runs on a timer: Claude is only used when you send a message.", "")
     return 0
 
