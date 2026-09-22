@@ -20,7 +20,12 @@ DEFAULTS = {
     "agents_dirs": [],
     "claude_home": "",
     "claude_command": "claude",
-    "models": {"best": "opus", "deep": "sonnet", "fast": "haiku"},
+    # Named in full, not as the short words "opus", "sonnet" and "haiku". Those words
+    # move: on 2026-09-22 "opus" started meaning Claude Opus 5.5, so Jeeves was running
+    # a model FleetView's price table had never heard of and the two disagreed about
+    # what you were using. Names checked live against Claude Code 2.1.280 that day.
+    # Put a short word back here if you would rather always follow the newest model.
+    "models": {"best": "claude-opus-5-5", "deep": "claude-sonnet-5", "fast": "claude-haiku-4-5"},
     "default_model": "best",
     "permission_mode": "dontAsk",
     "chat_timeout_seconds": 600,
@@ -55,15 +60,49 @@ def _merge(base, extra):
 
 
 def load(path=None):
-    """Your settings, with every missing value filled from DEFAULTS."""
+    """Your settings, with every missing value filled from DEFAULTS.
+
+    A file that cannot be read falls back to the defaults so Jeeves keeps running.
+    Ask problem() what went wrong: saying nothing, or blaming a missing file, sent
+    members looking in the wrong place.
+    """
     p = Path(path) if path else config_path()
     data = {}
     if p.exists():
         try:
-            data = json.loads(p.read_text(encoding="utf-8"))
+            data = json.loads(p.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
             data = {}
     return _merge(DEFAULTS, data)
+
+
+def problem(path=None):
+    """Plain words for what is wrong with config.json, or None if it is fine.
+
+    utf-8-sig above reads a file Notepad saved as "UTF-8 with BOM", which used to
+    break every read. What is left is a real mistake in the file: a trailing comma,
+    a missing bracket, a path typed with single backslashes.
+    """
+    p = Path(path) if path else config_path()
+    if not p.exists():
+        return None
+    try:
+        text = p.read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        return "%s could not be read: %s" % (p, exc)
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        where = ""
+        line = getattr(exc, "lineno", None)
+        if line:
+            where = "\n  Look at line %d:  %s" % (line, text.splitlines()[line - 1].strip()[:90])
+        return ("%s could not be read: %s%s\n"
+                "  Fix that line, or run  python install.py  to write a fresh one."
+                % (p, exc.msg if hasattr(exc, "msg") else exc, where))
+    if not isinstance(data, dict):
+        return "%s could not be read: it must start with { and end with }." % p
+    return None
 
 
 def claude_home(cfg):

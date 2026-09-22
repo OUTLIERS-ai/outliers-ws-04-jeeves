@@ -41,6 +41,14 @@ def world(tmp_path):
     # Noon today, so the "today" totals do not depend on when the tests are run.
     noon = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0)
     cfg_path = demo.build(tmp_path / "world", now=noon)
+    # The demo keeps the real addresses (3020 and 3010) so the guide's pictures are
+    # honest. The TESTS must not: a member who had also installed ProjectForge, which
+    # listens on 3020, got "1 failed, 51 passed" and thought they had broken Jeeves.
+    # Port 1 is reserved and nothing on a member's computer can answer on it.
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    for name, app in cfg["apps"].items():
+        app["url"] = "http://127.0.0.1:1"
+    cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     return cfg_path
 
 

@@ -26,7 +26,8 @@ streams in.
 
 ## What it needs
 
-- Python 3.8 or newer. Nothing to pip install: the server is Python's own library.
+- Python 3.11 or newer. Nothing to pip install: the server is Python's own library.
+  (Python 3.10 and older stopped getting security fixes; the installer refuses them.)
 - Claude Code, installed and logged in (`claude` works in a terminal).
 - Your second brain (from the second-brain series). Your CRM is optional.
 
@@ -63,13 +64,16 @@ puts it back.
 - It never listens on your network: 127.0.0.1 only.
 - It never writes to your vaults. The vault panels only read.
 - It never runs Claude on a timer. Claude runs when you press Send, and at no other time.
-- By default Chat can read and search your 2 vaults and nothing else: Jeeves
-  passes Claude Code a list of blocked tools (running commands, PowerShell,
-  writing or editing files, notebooks, fetching web pages, web search), so even
-  a tool you allowed in your own Claude Code settings is not used here. To let
-  Chat act, set `"allow_actions": true` in `config.json` and choose a
-  `"permission_mode"` (`"acceptEdits"` lets it edit notes). Every setting is
-  described in `guide/GUIDE.md`, section "Every command and setting".
+- By default Chat is given 3 tools and no others: open a file, search inside
+  files, find files by name (`--tools Read,Grep,Glob`). Everything else is
+  absent, including anything you allowed in your own Claude Code settings, and
+  anything Claude Code adds in a future version. Checked live on 2026-09-22
+  against Claude Code 2.1.280: the session reported exactly `Glob, Grep, Read`,
+  a request to write a file and run a command was refused and no file appeared,
+  and a request to read a note was answered from the note. To let Chat act, set
+  `"allow_actions": true` in `config.json` and choose a `"permission_mode"`
+  (`"acceptEdits"` lets it edit notes). Every setting is described in
+  `guide/GUIDE.md`, section "Every command and setting".
 
 ## Tests
 

@@ -6,3 +6,7 @@ Start Jeeves (hidden).vbs
 *.tmp
 __pycache__/
 .pytest_cache/
+
+# the built guide (the series builder makes these)
+guide/*.pdf
+guide/*.html

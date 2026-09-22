@@ -20,7 +20,7 @@ This is piece 4 of 4 in the agent workspace. Install them in order: 1 agent-flow
 | Claude Code | The Claude program you type to in a terminal. Jeeves sends your chat messages to it. |
 | Terminal | The text window where you type commands: PowerShell on Windows, Terminal on a Mac. |
 | Token | The unit Claude's usage is counted in. 1 token is roughly 3 quarters of a word. |
-| Model | Which Claude model answers. Jeeves offers 3: Opus (strongest), Sonnet (middle) and Haiku (cheapest). |
+| Model | Which Claude model answers. Jeeves offers 3, each named in full: Claude Opus 5.5 (strongest), Claude Sonnet 5 (middle) and Claude Haiku 4.5 (cheapest). |
 | Agent | A saved set of instructions Claude Code can hand a job to, kept in a `.claude/agents` folder. |
 | Tools | What Claude can do besides talk: read files, edit files, run commands, search the web. |
 | Rulebook | The `CLAUDE.md` file of instructions in your second brain. Claude Code reads it first. |
@@ -34,13 +34,13 @@ This is piece 4 of 4 in the agent workspace. Install them in order: 1 agent-flow
 
 The numbers on the next picture point at the parts you will use most. The key under the picture says what each one is.
 
-![A tour of the page. Each yellow number matches a line in the key underneath. The model menu shows "best · opus": your choice (best) and the Claude model it uses (Opus, the strongest)](img/cockpit-tour.png)
+![A tour of the page. Each yellow number matches a line in the key underneath. The model menu shows "best · claude-opus-5-5": your choice (best) and the exact Claude model it uses](img/cockpit-tour.png)
 
 The 10 panels:
 
 | Panel | What you see |
 |---|---|
-| Chat | A conversation with your own Claude Code. It works inside your second-brain folder, with your CRM folder added, so it can read both. By default it can read and search, and nothing else. |
+| Chat | A conversation with your own Claude Code. It works inside your second-brain folder, with your CRM folder added, so it can read both. By default it is given 3 tools and no others: open a file, search inside files, find files by name. |
 | Today | The ranked list of people to contact that your CRM writes each morning (a file called `Today.md` at the top of your CRM folder, built in part 7 of the CRM sessions), plus your second brain's day: today's daily note if you keep one, notes that changed in the last 3 days, and to-do checkboxes in your notes that you have not ticked yet. |
 | Across everything | 1 screen that sums up what is moving: people to speak to, decisions waiting for you, notes that changed, Claude use today, and whether your other apps are running. Click any heading to open its panel. |
 | Recommendations | A note in your second brain (`Inbox/Recommendations.md`) that you and your agents write suggestions into. |
@@ -117,11 +117,26 @@ Ashley wanted Jeeves to look like a character from an anime. Claude's first 2 at
 
 Before this download went out, 3 people checked it: a stranger followed this guide step by step, a reviewer used every panel, and a security reviewer tried to break it. What they found, and what changed:
 
-- **Chat could still use tools you had allowed elsewhere.** The setting it used blocked only the tools you had not already allowed in your own Claude Code settings. Now Jeeves hands Claude Code a list of blocked tools on every message. See "What Chat can and cannot do" below.
+- **Chat could still use tools you had allowed elsewhere.** The setting it used blocked only the tools you had not already allowed in your own Claude Code settings. Jeeves started naming the tools to block on every message. A day later that proved not to be enough either: see 2026-09-23 below.
 - **Stop did not stop Claude** when Claude Code was installed with npm (the installer that comes with Node.js, a program many developer tools need), because that kind of install starts the real Claude as a second, hidden program. Stop now ends both.
 - **2 copies could share port 4040 on Windows**, and `python start.py --stop` then stopped only 1 of them. Now only 1 copy can run per port, and starting it again says it is already running.
 - **After 1 failed message, every later message failed**, because Jeeves saved the number Claude Code uses to carry on a conversation, even for the failed one, so every later message tried to carry on a broken conversation. A failed message is now never saved.
 - **On a laptop, the chat box slid off the bottom of the screen** after the first answer. Fixed, and an automatic check now tests it at laptop size.
+
+### 2026-09-23: a second round of testing, the day before it went out
+
+The 3 checks were run again on the finished download, and an engine test drove every operation 5 times each. 10 more faults were found and fixed. These are the ones you would have met:
+
+- **Blocking tools by name left 25 of them available.** Counted on 2026-09-22 against Claude Code 2.1.280. The block list named 7; Claude Code has shipped many since the list was written, among them tools that book a job for later, raise a notification, start work elsewhere and message another agent. Chat is now given a list of what it MAY use — open a file, search inside files, find files by name — and nothing else. Proved against the real Claude Code, not only in a test: see "What Chat can and cannot do".
+- **The model was named by a word that moved.** `opus` meant Claude Opus 5.5 from 2026-09-22, and the price table in FleetView (piece 2) had never heard of it, so your tokens would have shown as "price unknown". Every model is now written out in full.
+- **A popped-out Chat quietly erased a message.** Send a message from a popped-out Chat window, then send another from the main window, and the pop-out's message disappeared from the saved conversation: each window wrote its whole record over the other's. Each window now adds only its own new lines, and a message sent in either window appears in the other.
+- **Send looked lit while an answer was coming in.** It refused every press, and the only explanation sat in the top corner of the window, up to 921 pixels away from where you were typing. Send is now greyed out, and the reason is printed at the bottom of the conversation.
+- **A missing folder was reported as a quiet day.** Point `second_brain` at a folder that is not there — a typo, a renamed folder, an external drive not plugged in — and Today said "Nothing has moved and nothing is left open" while Vaults, on the same screen, said the folder did not exist. All 3 panels now name the folder. Pictured under "When it goes wrong".
+- **The checks failed if you were running the work board.** `python -m pytest -q` said 1 failed, 51 passed on any computer where ProjectForge (piece 3, out the same day) was running, because 1 check assumed nothing was answering on its port. The checks no longer depend on what else you have running.
+- **With Claude Code missing, the one link that fixes it could not be clicked**, and the suggested questions still filled a text box that was switched off. The address is a link now, and the suggestions are put away.
+- **The port advice named the port that had just failed.** It always said `--port 4041`, which is no help to someone already on 4041. It now finds a port that is free.
+- **A broken `config.json` was reported as "No config.json yet".** A comma in the wrong place sent you to the installer instead of to the line you had just typed. The message now names the file, the mistake and the line number. A file saved as "UTF-8 with BOM" (Notepad's default in some versions) reads fine now too.
+- **The Python floor was 3.8**, which stopped getting security fixes on 2024-10-07. It is 3.11, and the installer refuses anything older.
 
 ### What this download keeps, and what it drops
 
@@ -141,7 +156,7 @@ Before this download went out, 3 people checked it: a stranger followed this gui
 | Cost | Nothing runs on a timer. Reading your notes and Claude Code's logs costs 0 tokens. | Every chat message starts Claude Code once, and each time it re-reads your `CLAUDE.md` instruction file and the conversation so far. We did not measure that figure for a member's setup. |
 | Speed | The reading panels never start Claude, so they answer without an AI wait. | Claude Code is started fresh for each message rather than kept open, so the first word takes longer than the original's 1.4 seconds. |
 | Answers | Your own Claude Code: every agent, skill and rulebook you have. | If Claude Code is not installed or not logged in, Chat cannot answer (every other panel still works). |
-| Safety | 127.0.0.1 only; the note panels only read; Chat can only read and search unless you allow more. | Chat refuses when you ask it to edit a note or run a command, until you change 2 settings. |
+| Safety | 127.0.0.1 only; the note panels only read; Chat has 3 tools, all of them reading, unless you allow more. | Chat refuses when you ask it to edit a note or run a command, until you change 2 settings. |
 | Breadth | 10 panels, all movable, 4 ready-made layouts, your layout saved. | It is a browser tab, not its own app window. |
 | Install | Uses only the parts that come with Python: nothing extra to install. | The figure for how much of your Claude plan's 5-hour usage allowance you have used needs ccusage, a free add-on program, which needs Node.js. |
 
@@ -151,14 +166,14 @@ Before this download went out, 3 people checked it: a stranger followed this gui
 
 | You need | How to check |
 |---|---|
-| Python 3.8 or newer | In a terminal: `python --version` (on a Mac: `python3 --version`) |
-| Claude Code, logged in | `claude --version` prints a number (2.1.278 on 2026-09-22), and typing `claude` opens it without asking you to log in |
+| Python 3.11 or newer | In a terminal: `python --version` (on a Mac: `python3 --version`). The installer refuses anything older: Python 3.10 and everything before it has stopped getting security fixes. |
+| Claude Code, logged in | `claude --version` prints a number (2.1.280 on 2026-09-23), and typing `claude` opens it without asking you to log in |
 | Git | `git --version` |
 | Your second brain | The folder from the second-brain sessions. Its path, for example `C:\Users\<you>\Documents\Second Brain` |
 | Your CRM (optional) | The folder from the CRM sessions. Without it, Today shows only your second brain |
-| ccusage (optional) | A free program that reads how much of your 5-hour Claude allowance you have used. Check with `ccusage --version`. Install Node.js first, then type `npm install -g ccusage` (-g means it works from every folder). Version 20.0.24 on 2026-09-22 |
+| ccusage (optional) | A free program that reads how much of your 5-hour Claude allowance you have used. Check with `ccusage --version`. Install Node.js first, then type `npm install -g ccusage` (-g means it works from every folder). Version 20.0.24 on 2026-09-23 |
 
-![The 3 checks in a terminal, with the versions found on 2026-09-22. Any number at or above these is fine](img/terminal-checks.png)
+![The 3 checks in a terminal, with the versions found on 2026-09-23. Any number at or above these is fine](img/terminal-checks.png)
 
 > **Tip:** Want to see Jeeves before pointing it at your real notes? After step 2 below, run `python tools/demo.py ../jeeves-demo --serve --port 4099`. This makes a practice folder called `jeeves-demo` next to the Jeeves folder, with a made-up bookkeeper's 2 vaults and 5 agents, and starts Jeeves on it. Open http://127.0.0.1:4099/ to see it. The chat answers from a script and costs 0 tokens. Press Ctrl+C in that terminal to stop it.
 
@@ -226,7 +241,9 @@ Across everything reads the numbered table in `Today.md`: 1 row per person, with
 
 **Chat.** Type and press Enter. Shift+Enter makes a new line. The lines starting with an arrow show which files Claude is reading. While Claude is working, a **Stop** button appears next to Send: press it to end the answer. A message typed while an answer is still coming in is not sent; wait, or press Stop first. A run that goes past 10 minutes is stopped for you (`"chat_timeout_seconds"` in `config.json`). **Suggestions** shows ready-made questions you can click.
 
-The model menu at the top picks which Claude model answers: `best` (the strongest, Opus), `deep` (the middle one, Sonnet) or `fast` (the cheapest, Haiku). You can change which model each name uses in `config.json`, and your choice is remembered in this browser.
+The model menu at the top picks which Claude model answers: `best` (`claude-opus-5-5`, the strongest), `deep` (`claude-sonnet-5`, the middle one) or `fast` (`claude-haiku-4-5`, the cheapest). You can change which model each name uses in `config.json`, and your choice is remembered in this browser.
+
+Each one is written out in full rather than as the short word `opus`, `sonnet` or `haiku`. The short words move: on 2026-09-22 Anthropic released Claude Opus 5.5, and from that day `opus` meant the new model. Jeeves would have started using it without telling you, and FleetView (piece 2) would have shown your tokens as "price unknown", because it prices a model by its full name. Written out, the model menu, FleetView's price table and this guide all name the same model. If you would rather always follow the newest model, put `"opus"` back in `config.json` and accept that the name can change under you.
 
 ![While Claude answers: the arrow line, the Stop button, the orb and the status line](img/chat-answering.png)
 
@@ -236,7 +253,27 @@ The conversation stays on screen after a reload or a restart, and Claude Code ca
 
 ![After an answer: a note link to follow, what Chat may do, and New conversation](img/cockpit-chat.png)
 
-**What Chat can and cannot do.** By default Chat can read and search the files in your 2 vaults, and nothing else. On every message Jeeves gives Claude Code a list of blocked tools: running commands (in Bash or PowerShell, the Mac/Linux and Windows command lines), writing or editing files, notebooks, fetching web pages and web search. It gives the same list as blocking rules in a settings file, because Claude Code's own documentation (read 2026-09-22) says those rules also apply to any helper agent Claude starts while answering you. It also loads none of your add-on servers (MCP servers, which give Claude extra tools such as sending messages). So even a tool you allowed in your own Claude Code settings is not used from Jeeves. To let Chat act, see "5. Let it edit notes, on your terms" under "Fit it to your own AI system".
+**What Chat can and cannot do.** By default Chat is given 3 tools and no others:
+
+| Tool | What it does |
+|---|---|
+| Read | Opens 1 file and reads it |
+| Grep | Searches inside your files for words |
+| Glob | Finds files by name |
+
+That is the whole list. Everything else Claude Code can normally do is simply absent: running commands, writing or editing a file, opening a web page, searching the web, booking a job to run later, messaging another agent, and anything else Claude Code adds in a future version. Jeeves also loads none of your add-on servers (MCP servers, which give Claude extra tools such as sending messages), and it repeats the ban on the acting tools in a rules file, because Claude Code's own documentation (read 2026-09-22) says those rules also apply to a helper agent Claude starts while answering you.
+
+This used to work the other way round, and it was weaker than it looked. Jeeves named 7 tools to block. Measured on 2026-09-22 against Claude Code 2.1.280, that left **25** tools still available, including ones that book a run for later, raise a notification, start work elsewhere and message another agent. A list of tools to block has to be edited every time Claude Code ships a new one. A list of what is allowed does not.
+
+Checked live on 2026-09-22, against the real Claude Code, in a folder with 1 note in it:
+
+| Asked | What happened |
+|---|---|
+| What tools do you have? | The session reported exactly 3: Glob, Grep, Read |
+| "Create a file called proof.txt, and run `echo hello`" | "I did neither of them... I have no tool that creates or writes a file... no tool that runs commands." No file appeared |
+| "Read Pricing review.md and tell me what the package costs" | "The Books-only package costs 180 a month" — read from the note |
+
+To let Chat act, see "5. Let it edit notes, on your terms" under "Fit it to your own AI system".
 
 **Vaults.** Pick Second brain or CRM and type to filter by note name. Press Enter to search inside every note in both vaults. A link between notes (a name in double square brackets) anywhere opens the note in whichever vault has it, and the tab switches to match; if no vault has it, the panel says so and offers to search.
 
@@ -250,7 +287,7 @@ The conversation stays on screen after a reload or a restart, and Claude Code ca
 
 ![Activity: every Claude Code conversation, which folder, how many turns and tokens](img/panel-activity.png)
 
-![Tokens: today, by kind and by model (Opus is the strongest Claude model, Sonnet the middle one, Haiku the cheapest). k means thousand: 509.7k is 509,700 tokens. The 5-hour box needs the optional ccusage program](img/panel-tokens.png)
+![Tokens: today, by kind and by model (Claude Opus is the strongest model, Sonnet the middle one, Haiku the cheapest). k means thousand: 509.7k is 509,700 tokens. The 5-hour box needs the optional ccusage program](img/panel-tokens.png)
 
 The Tokens panel's 4 kinds: **Conversation re-read** (cache read) is Claude re-reading the conversation so far, the cheapest kind. **Saved for the next re-read** (cache write) is Claude storing the conversation so it can re-read it cheaply next time. **Written by Claude** is its answers. **New input** is what you typed.
 
@@ -319,7 +356,7 @@ Vaults side by side on top, Chat below them, every other panel as tabs next to V
 Every layout must keep all 10 panels. Add it to the test in tests/test_ui.py.
 ```
 
-**5. Let it edit notes, on your terms.** 2 settings, then a rule in your rulebook. `"allow_actions": true` stops Jeeves blocking any tool. `"acceptEdits"` lets Claude edit files without asking you.
+**5. Let it edit notes, on your terms.** 2 settings, then a rule in your rulebook. `"allow_actions": true` takes the 3-tool limit off and gives Chat every tool Claude Code has. `"acceptEdits"` lets Claude edit files without asking you.
 
 ```
 In config.json set "allow_actions" to true and "permission_mode" to "acceptEdits".
@@ -398,9 +435,9 @@ changed.
 | `second_brain` | Your second-brain folder. Chat works inside it. | asked by the installer |
 | `crm_vault` | Your CRM folder. Blank if you have none. | asked by the installer |
 | `agents_dirs` | Extra folders of agents. The `.claude/agents` folders in your user folder (for example `C:\Users\<you>`) and in each vault are always read. | asked by the installer |
-| `models` | Which Claude model `best`, `deep` and `fast` use. | `opus` (strongest), `sonnet` (middle), `haiku` (cheapest) |
+| `models` | Which Claude model `best`, `deep` and `fast` use. Write the name in full so it cannot change under you. | `claude-opus-5-5`, `claude-sonnet-5`, `claude-haiku-4-5` |
 | `default_model` | The model picked when you first open Jeeves. | `"best"` |
-| `allow_actions` | `false`: Chat can only read and search. `true`: no tools are blocked. | `false` |
+| `allow_actions` | `false`: Chat is given 3 reading tools and no others. `true`: Chat gets every tool Claude Code has. | `false` |
 | `permission_mode` | Claude Code's own rule for when it must ask you first. `"dontAsk"`: Claude never stops to ask you; anything that would need your yes is refused instead. | `"dontAsk"` |
 | `chat_timeout_seconds` | How long an answer may run before Jeeves stops it. | `600` |
 | `claude_command` | How to start Claude Code. If `claude --version` works but Jeeves cannot find it, put its full path here, for example `"C:/Users/<you>/.local/bin/claude.exe"`. | `"claude"` |
@@ -421,7 +458,7 @@ changed.
 | `Jeeves.vbs` in your Startup folder, or `ai.outliers.jeeves.plist` in `Library/LaunchAgents` on a Mac | Only if you said yes to starting when you log in. |
 | `state/chat-sessions.json` | The number of the conversation Chat is carrying on. |
 | `state/jeeves.pid` | The process number (the ID Windows gives the running Jeeves program) and its port, so `--stop` finds it. |
-| `state/read-only-settings.json` | The blocking rules Chat is given. |
+| `state/read-only-settings.json` | The rules that keep the acting tools away from a helper agent Chat hands work to. |
 
 `README.md` repeats the short version of this guide. `WHAT-I-STOLE.md` (our name for the list of free projects Jeeves borrows from, with each licence) names what Jeeves was built from. `LICENSE` is the MIT licence for our code; Dockview (the free add-on that makes the panels movable) keeps its own licence in `jeeves/static/vendor/dockview/`.
 
@@ -441,14 +478,20 @@ changed.
 | Work board or FleetView says "not running" | Jeeves only looks. It never starts another app, because in Ashley's first Jeeves, starting another app itself left 2 copies of that app competing for the same port. | Start ProjectForge or FleetView yourself, then press the refresh arrow. |
 | An embedded app is blank | An app can refuse to be shown inside another page. | Use the "open in its own tab" link in the panel's top line. |
 | Token totals looked doubled | Claude Code writes the same reply more than once in its logs. | Fixed: each reply is counted once. If your numbers still differ from ccusage's, trust ccusage. |
-| "Could not listen on port 4040" | Another program is using the port. | `python start.py --port 4041`, or run `python install.py --port 4041`. |
+| "Could not listen on port 4040" | Another program is using the port. | The message names a port that is free right now: run the line it prints, for example `python start.py --port 4041`. To keep the new port, run `python install.py --port 4041`. |
+| "config.json could not be read", with a line number | You edited `config.json` and left it in a shape the computer cannot read: usually a comma after the last setting, or a missing bracket or quotation mark. | Open the file, look at the line the message names, and correct it. Or run `python install.py` to write a fresh one; your vault folders are asked for again, nothing else is lost. |
+| "Your second brain folder is not there" | The folder named in `config.json` does not exist: a typo, a renamed folder, or a drive that is not plugged in. | Check `"second_brain"` in `config.json`, or plug the drive back in, then refresh the page. The same message appears for `"crm_vault"`. |
 | It will not start at all | Something Jeeves needs is missing or wrong. This rebuild needs nothing outside its own folder except your vaults. | Run `python install.py` again: it checks everything and says what is missing. |
 
-What 2 of these messages look like on screen: a failed chat message, and a brand-new setup with empty panels.
+What 4 of these look like on screen: a failed chat message, a brand-new setup with empty panels, Chat with no Claude Code installed, and a folder that is not there.
 
 ![A failed message says what went wrong in plain words, with Try again](img/chat-failed.png)
 
 ![A brand-new setup: each empty panel says what is missing and how to fix it](img/new-member.png)
+
+![Chat with no Claude Code installed: the address is a link, the text box says it is switched off, and the suggested questions are put away](img/no-claude.png)
+
+![A second brain folder that is not there. Today, Across everything and Vaults all say so, and all name the same folder. Before 2026-09-23 the first 2 said "Nothing has moved and nothing is left open", which read as a quiet week](img/folder-missing.png)
 
 > **Note:** Jeeves never writes to your vaults. If a note changed, something else changed it: Claude through Chat (only if you set `"allow_actions"` to true), or one of your agents.
 

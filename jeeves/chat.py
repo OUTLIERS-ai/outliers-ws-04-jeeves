@@ -16,10 +16,17 @@ Choices made on purpose:
   refused). On its own that is not enough: "dontAsk" still lets Claude use any
   tool you have already allowed in your own Claude Code settings, such as
   running commands or fetching web pages. So unless config.json says
-  "allow_actions": true, Jeeves also passes --disallowedTools with every tool
-  that runs commands, changes files or reaches the internet (READ_ONLY_BLOCK).
-  The same list goes in as deny rules through --settings, because deny rules
-  also bind any subagent Chat hands work to, and --strict-mcp-config loads no
+  "allow_actions": true, Jeeves passes --tools Read,Grep,Glob: the 3 tools Chat
+  MAY use, and no others.
+  This used to be the other way round - a list of tools to block. Measured on
+  2026-09-22, naming 7 tools to block still left 25 available, among them
+  CronCreate and ScheduleWakeup (book a future run), SendMessage (write to
+  another agent), RemoteTrigger (start work elsewhere), PushNotification, Skill,
+  Workflow and Task. A block list has to be edited every time Claude Code ships
+  a tool; a list of what is allowed does not.
+  Two more locks go on with it: the tools that run commands, change files or
+  reach the internet also go in as deny rules through --settings, because deny
+  rules bind any subagent Chat hands work to, and --strict-mcp-config loads no
   add-on (MCP) servers. Chat can then read and search your 2 vaults, and
   nothing else.
 - One run per conversation at a time. A second message while the first is
@@ -50,8 +57,11 @@ _RUNNING = {}      # session key -> the running Claude (or _RESERVED while it st
 _STOPPED = set()   # session keys whose run the member stopped on purpose
 _RESERVED = object()
 
-# The tools that run commands, change files or reach the internet. Blocked unless
-# config.json says "allow_actions": true. Read, Grep and Glob stay allowed.
+# The only 3 tools Chat may use unless config.json says "allow_actions": true.
+# Read opens a file, Grep searches inside files, Glob finds files by name.
+READ_ONLY_TOOLS = ["Read", "Grep", "Glob"]
+# The tools that run commands, change files or reach the internet. These go in as
+# deny rules, which also bind any subagent Chat hands work to.
 READ_ONLY_BLOCK = ["Bash", "PowerShell", "Write", "Edit", "NotebookEdit", "WebFetch", "WebSearch"]
 BUSY_TEXT = "Still answering your last message. Wait for it to finish, or press Stop first."
 
@@ -144,7 +154,8 @@ def _read_only_settings():
 def build_args(cfg, model_key, session_key):
     """The full command line, plus the session id and whether it is new."""
     models = cfg.get("models") or {}
-    model = models.get(model_key) or models.get(cfg.get("default_model", "best")) or "opus"
+    model = (models.get(model_key) or models.get(cfg.get("default_model", "best"))
+             or C.DEFAULTS["models"]["best"])
     base = resolve_command(cfg)
     if base is None:
         return None, None, None
@@ -155,9 +166,10 @@ def build_args(cfg, model_key, session_key):
     if cfg.get("permission_mode"):
         args += ["--permission-mode", cfg["permission_mode"]]
     if read_only(cfg):
-        # 1 argument, commas between names, so it can never swallow the flags after it.
-        args += ["--disallowedTools", ",".join(READ_ONLY_BLOCK)]
-        # The same list as deny rules in a settings file: Claude Code's documentation
+        # The list of what Chat MAY use. 1 argument, commas between the names, so it
+        # can never swallow the flags after it.
+        args += ["--tools", ",".join(READ_ONLY_TOOLS)]
+        # The acting tools as deny rules in a settings file: Claude Code's documentation
         # says deny rules apply to subagents too, so an agent Chat hands work to is
         # blocked in the same way. No add-on (MCP) servers are loaded either: their
         # tools could send messages or change things elsewhere.

@@ -27,7 +27,7 @@ def test_chat_streams_words_then_a_final_answer(server, tmp_path, monkeypatch):
     call = _calls(log)[0]
     a = call["argv"]
     assert a[:1] == ["-p"] and "stream-json" in a and "--include-partial-messages" in a
-    assert a[a.index("--model") + 1] == "haiku"          # fast -> haiku, from config
+    assert a[a.index("--model") + 1] == "claude-haiku-4-5"   # "fast" names the model in full
     assert a[a.index("--permission-mode") + 1] == "dontAsk"
     cfg = json.loads(server[1].read_text(encoding="utf-8"))
     assert a[a.index("--add-dir") + 1] == cfg["crm_vault"]

@@ -49,14 +49,22 @@ def _blocked(argv):
     return set(argv[argv.index("--disallowedTools") + 1].replace(",", " ").split())
 
 
-def test_chat_cannot_run_commands_edit_files_or_go_online_by_default(server, tmp_path, monkeypatch):
-    """Security audit row 1: dontAsk alone still uses any tool the member allowed elsewhere."""
+def _allowed(argv):
+    if "--tools" not in argv:
+        return None
+    return set(argv[argv.index("--tools") + 1].replace(",", " ").split())
+
+
+def test_chat_is_given_only_the_3_reading_tools(server, tmp_path, monkeypatch):
+    """Security audit row 1 and the re-audit of 2026-09-22: naming the tools to block
+    left 25 others available (CronCreate, ScheduleWakeup, SendMessage, Skill, Task and
+    more). Chat is now given a list of what it MAY use: Read, Grep, Glob."""
     log = _log(tmp_path, monkeypatch)
     post(server[0] + "/api/chat", {"message": "hi"})
     a = _calls(log)[0]["argv"]
-    assert READ_ONLY_BLOCK <= _blocked(a)
+    assert _allowed(a) == {"Read", "Grep", "Glob"}
     # the value is 1 argument, so it can never swallow the flags after it
-    assert a[a.index("--disallowedTools") + 1].count(" ") == 0
+    assert a[a.index("--tools") + 1].count(" ") == 0
     # the same rules as deny rules, which Claude Code applies to subagents as well
     rules = json.loads(Path(a[a.index("--settings") + 1]).read_text(encoding="utf-8"))
     assert READ_ONLY_BLOCK <= set(rules["permissions"]["deny"])
@@ -70,7 +78,8 @@ def test_allow_actions_in_config_lifts_the_block(server, tmp_path, monkeypatch):
     server[1].write_text(json.dumps(cfg), encoding="utf-8")
     post(server[0] + "/api/chat", {"message": "hi"})
     a = _calls(log)[0]["argv"]
-    assert _blocked(a) == set() and "--settings" not in a and "--strict-mcp-config" not in a
+    assert _allowed(a) is None and _blocked(a) == set()
+    assert "--settings" not in a and "--strict-mcp-config" not in a
 
 
 def test_public_config_says_whether_chat_is_read_only(server):
@@ -295,3 +304,121 @@ def test_a_failed_login_run_adds_no_odd_rows(server):
     sessions.clear_cache()
     assert "<synthetic>" not in get_json(server[0] + "/api/tokens")["by_model"]
     assert all(s["id"] != "abc" for s in get_json(server[0] + "/api/activity")["sessions"])
+
+
+# =================================================================== second audit
+# Faults found on 2026-09-22 by the second usability teardown, the engine
+# reliability run and the "is it still current" check. Each test below was
+# written to FAIL on the code as published that morning.
+
+def test_every_model_is_named_in_full_so_the_price_table_can_match(server):
+    """Still-current audit, must-fix 2: the default model was the word "opus", which on
+    2026-09-22 started resolving to Claude Opus 5.5. FleetView prices a model by its full
+    name, so Jeeves and FleetView disagreed about what a member was running."""
+    from jeeves import config as C
+    assert C.DEFAULTS["models"] == {"best": "claude-opus-5-5", "deep": "claude-sonnet-5",
+                                    "fast": "claude-haiku-4-5"}
+    for name in get_json(server[0] + "/api/config")["models"].values():
+        assert name.startswith("claude-"), "%r is an alias, not a model name" % name
+
+
+def test_the_installer_writes_the_same_models_as_the_settings_file(tmp_path, monkeypatch):
+    import importlib
+    from jeeves import config as C
+    monkeypatch.setenv("JEEVES_CONFIG", str(tmp_path / "config.json"))
+    import install
+    importlib.reload(install)
+    assert install.MODELS == C.DEFAULTS["models"]
+
+
+def test_today_says_which_second_brain_folder_is_missing(world):
+    """Re-audit N1: with the second-brain folder gone, Today said "Nothing has moved and
+    nothing is left open" while Vaults said the folder does not exist."""
+    from jeeves import config as C, vaults
+    cfg = C.load(str(world))
+    cfg["second_brain"] = str(Path(cfg["second_brain"]).parent / "not-here")
+    d = vaults.today(cfg)
+    assert d["brain"]["found"] is False
+    assert d["brain"]["path"] == cfg["second_brain"], "the panel needs the folder to name it"
+
+
+def test_the_crm_half_says_the_folder_is_missing_too(world):
+    from jeeves import config as C, vaults
+    cfg = C.load(str(world))
+    cfg["crm_vault"] = str(Path(cfg["crm_vault"]).parent / "no-crm")
+    crm = vaults.today(cfg)["crm"]
+    assert crm["found"] is False and crm["exists"] is False
+    assert "does not exist" in crm["hint"] and cfg["crm_vault"] in crm["hint"]
+
+
+def test_the_tests_own_world_never_asks_a_port_a_member_might_be_running(world):
+    """Re-audit N5: the shipped tests asserted nothing was listening on port 3020. Anyone
+    running ProjectForge (piece 3, out the same day) got 1 failed, 51 passed."""
+    apps = json.loads(world.read_text(encoding="utf-8"))["apps"]
+    for name, a in apps.items():
+        assert ":1/" in a["url"] or a["url"].endswith(":1"), \
+            "%s points at %s, which something on this computer could answer" % (name, a["url"])
+
+
+def test_the_port_advice_names_a_free_port_not_the_one_that_just_failed(world, capsys):
+    """Reliability fault J1: the advice was the fixed text --port 4041, so a member already
+    on 4041 was told to try the port that had just refused them. Two blocked ports must
+    now produce two different pieces of advice, each of them free."""
+    import start
+    suggestions = []
+    for _ in range(2):
+        taken = socket.socket()
+        taken.bind(("127.0.0.1", 0))
+        taken.listen(1)
+        port = taken.getsockname()[1]
+        try:
+            rc = start.main(["--port", str(port), "--no-open", "--config", str(world)])
+            out = capsys.readouterr().out
+        finally:
+            taken.close()
+        assert rc == 1
+        suggested = int(out.split("--port")[-1].strip().split()[0])
+        assert suggested != port, "it named the port that had just refused"
+        free = socket.socket()
+        try:
+            free.bind(("127.0.0.1", suggested))     # the port it names must really be free
+        finally:
+            free.close()
+        suggestions.append(suggested)
+    assert suggestions[0] != suggestions[1], "the advice is fixed text, not a free port"
+
+
+def test_a_broken_config_file_is_named_as_broken(tmp_path, capsys):
+    """Reliability fault J2: a trailing comma in config.json was reported as
+    "No config.json yet. Run: python install.py"."""
+    import start
+    bad = tmp_path / "config.json"
+    bad.write_text('{\n "name": "Jeeves",\n "port": 4040,\n}\n', encoding="utf-8")
+    rc = start.main(["--config", str(bad), "--no-open"])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "No config.json yet" not in out
+    assert "could not be read" in out and "line 3" in out and str(bad) in out
+
+
+def test_a_config_saved_with_a_byte_order_mark_still_reads(tmp_path):
+    from jeeves import config as C
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"name": "Bertie"}), encoding="utf-8-sig")
+    assert C.load(str(p))["name"] == "Bertie"
+    assert C.problem(p) is None
+
+
+def test_the_installer_refuses_a_python_older_than_3_11(tmp_path, monkeypatch):
+    """Still-current audit, must-fix 4: the installer let Python 3.8 through. 3.8 stopped
+    getting security fixes on 2024-10-07 and 3.9 on 2025-10-31."""
+    import importlib
+    monkeypatch.setenv("JEEVES_CONFIG", str(tmp_path / "config.json"))
+    import install
+    importlib.reload(install)
+    assert install.MIN_PY == (3, 11)
+    assert install.too_old((3, 10, 18)) is True
+    assert install.too_old((3, 11, 0)) is False
+    assert "3.11" in install.__doc__ and "3.8" not in install.__doc__
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Python 3.11 or newer" in readme

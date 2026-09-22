@@ -195,20 +195,27 @@ def today(cfg, now=None):
     vm = _vault_map(cfg)
     out = {"date": now.strftime("%A %d %B %Y"), "crm": None, "brain": None}
 
+    # Every half says which folder it looked in and whether that folder is there.
+    # Without it the panel said "Nothing has moved and nothing is left open" for a
+    # folder that did not exist, while the Vaults panel on the same screen said so.
     if "crm" in vm:
         root = vm["crm"][1]
         page = root / "Today.md"
         if page.is_file():
-            out["crm"] = {"found": True, "path": "Today.md",
+            out["crm"] = {"found": True, "exists": True, "vault": str(root), "path": "Today.md",
                           "text": page.read_text(encoding="utf-8", errors="replace")[:MAX_BYTES],
                           "built": datetime.fromtimestamp(page.stat().st_mtime).strftime("%a %d %b %H:%M")}
+        elif not root.is_dir():
+            out["crm"] = {"found": False, "exists": False, "vault": str(root),
+                          "hint": "Your CRM folder does not exist: %s . Check \"crm_vault\" "
+                                  "in config.json." % root}
         else:
-            out["crm"] = {"found": False, "vault": str(root),
+            out["crm"] = {"found": False, "exists": True, "vault": str(root),
                           "hint": "No Today.md yet. In your CRM folder run: python _engine/today.py --write"}
 
     if "brain" in vm:
         root = vm["brain"][1]
-        b = {"found": root.is_dir(), "daily": None, "moved": [], "open": []}
+        b = {"found": root.is_dir(), "path": str(root), "daily": None, "moved": [], "open": []}
         if root.is_dir():
             dn = _daily_note(cfg, root, now)
             if dn:

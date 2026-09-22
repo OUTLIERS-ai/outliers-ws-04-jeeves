@@ -18,7 +18,7 @@ answers changes nothing.
 
 Nothing here runs on a timer. Nothing starts Claude unless you type a message.
 
-Needs: Python 3.8 or newer and Claude Code. Nothing to pip install.
+Needs: Python 3.11 or newer and Claude Code. Nothing to pip install.
 """
 
 import argparse
@@ -39,7 +39,17 @@ else:
     CONFIG = HERE / "config.json"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 LAUNCHER_NAME = "Jeeves.vbs"
+MIN_PY = (3, 11)
+# The 3 models the chat panel offers, named in full so FleetView can price them and
+# so a member knows exactly what they are running. Checked live on 2026-09-22.
+MODELS = {"best": "claude-opus-5-5", "deep": "claude-sonnet-5", "fast": "claude-haiku-4-5"}
 PLIST_NAME = "ai.outliers.jeeves.plist"
+
+
+def too_old(info):
+    """True when this Python is older than Jeeves needs. Kept apart so it can be tested
+    without a second Python on the machine."""
+    return tuple(info[:2]) < MIN_PY
 
 
 def say(*lines):
@@ -241,8 +251,11 @@ def main(argv=None):
         return uninstall()
 
     # 1. What it needs. If anything is missing, stop and change nothing.
-    if sys.version_info < (3, 8):
-        say("Jeeves needs Python 3.8 or newer. This is %s." % sys.version.split()[0],
+    if too_old(sys.version_info):
+        say("Jeeves needs Python %d.%d or newer. This is %s."
+            % (MIN_PY[0], MIN_PY[1], sys.version.split()[0]),
+            "Python 3.10 and older no longer get security fixes.",
+            "Install a newer Python from https://www.python.org/downloads/ and run this again.",
             "Nothing has been changed.", "")
         return 1
     claude = shutil.which("claude")
@@ -313,15 +326,18 @@ def main(argv=None):
         pw = "not found"
     say("  playwright (only needed to retake the guide's pictures): %s" % pw)
     if not port_free(port) and old.get("port") != port:
+        # Name a port that is actually free, never a fixed number: a member already on
+        # 4041 was being told to try the port that had just refused them.
+        spare = next((p for p in range(port + 1, port + 60) if port_free(p)), port + 1)
         say("  Port %d is busy right now. Jeeves will say so when it starts; pick another "
-            "with python install.py --port 4041" % port)
+            "with python install.py --port %d" % (port, spare))
 
     # 4. One config file. Keep anything you added by hand.
     cfg = dict(old)
     cfg.update({"second_brain": brain, "crm_vault": crm,
                 "agents_dirs": [agents] if agents else [], "port": port})
     cfg.setdefault("name", "Jeeves")
-    cfg.setdefault("models", {"best": "opus", "deep": "sonnet", "fast": "haiku"})
+    cfg.setdefault("models", dict(MODELS))
     cfg.setdefault("default_model", "best")
     cfg.setdefault("permission_mode", "dontAsk")
     cfg.setdefault("allow_actions", False)
@@ -360,8 +376,9 @@ def main(argv=None):
         "Your browser opens http://127.0.0.1:%d/ . You should see the orb top left," % port,
         "Chat on the left, Today in the middle and your agents in a tab below it.",
         "Leave the terminal open while you use it; Ctrl+C in it stops Jeeves.",
-        "Chat can read your 2 vaults. It cannot run commands, change files or use",
-        "the internet unless you set \"allow_actions\": true in config.json.",
+        "Chat is given 3 tools and no others: open a file, search inside files, find",
+        "files by name. Commands, file changes and the internet are switched off until",
+        "you set \"allow_actions\": true in config.json.",
         "Nothing runs on a timer: Claude is only used when you send a message.", "")
     return 0
 

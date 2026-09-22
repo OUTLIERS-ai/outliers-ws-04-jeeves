@@ -29,7 +29,8 @@ def test_installs_then_changes_nothing_the_second_time(world, tmp_path, monkeypa
     got = json.loads(cfg.read_text(encoding="utf-8"))
     assert got["second_brain"] == str(Path(w["second_brain"]).resolve())
     assert got["port"] == 4555 and got["permission_mode"] == "dontAsk"
-    assert got["models"] == {"best": "opus", "deep": "sonnet", "fast": "haiku"}
+    assert got["models"] == {"best": "claude-opus-5-5", "deep": "claude-sonnet-5",
+                             "fast": "claude-haiku-4-5"}
     before = cfg.read_bytes()
     capsys.readouterr()
     rc, _ = run_install(monkeypatch, cfg, "--vault", w["second_brain"], "--crm", w["crm_vault"],

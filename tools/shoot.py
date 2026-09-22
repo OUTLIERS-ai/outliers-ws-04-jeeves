@@ -172,10 +172,16 @@ def main(work, out):
     from jeeves.server import serve_in_thread
 
     # The made-up world points its Work board and FleetView at the real default ports (3020, 3010),
-    # so the pictures match the guide. If a real board is running there, stop: never photograph it.
-    for p_ in (3020, 3010):
-        if not port_free(p_):
-            sys.exit("Port %d is in use (a real ProjectForge or FleetView?). Stop it, then run again." % p_)
+    # so the pictures match the guide. Nothing real is ever photographed: if something is
+    # answering on those ports on this computer, the app check is made to say "not running",
+    # which is what a member who has not started them sees.
+    busy = [p_ for p_ in (3020, 3010) if not port_free(p_)]
+    if busy:
+        from jeeves import apps as _apps
+        _apps.probe = lambda url, timeout=0.5: False
+        print("  Something is answering on port %s here. The pictures show the member's case"
+              % " and ".join(str(x) for x in busy))
+        print("  (not running); nothing from the program on that port is photographed.")
 
     work = Path(work).resolve()
     out = Path(out).resolve()
@@ -221,7 +227,8 @@ def main(work, out):
 
         # terminal pictures ---------------------------------------------------------
         drawn("terminal-checks.png", "<div class='wrap'>" + terminal(
-            "Terminal: checking what Jeeves needs (2026-09-22)", versions) + "</div>", 1400)
+            "Terminal: checking what Jeeves needs (%s)" % now.strftime("%Y-%m-%d"),
+            versions) + "</div>", 1400)
         drawn("terminal-install.png", "<div class='wrap'>" + terminal(
             "Terminal: python install.py, pressing Enter 5 times (made-up folders; yours will be your own)",
             [("python install.py", typed_enter(install_out))]) + "</div>", 1400)
@@ -252,7 +259,7 @@ def main(work, out):
             {"sel": ".dv-tab:has(.dv-default-tab-content)", "n": 2, "at": "right", "dx": 60, "label": "Chat: ask anything about your notes and CRM. Enter sends."},
             {"sel": "[data-card=people]", "n": 3, "at": "left", "label": "Across everything: read this first. Click a heading to open its panel."},
             {"sel": ".vb", "n": 4, "at": "left", "label": "Vaults: both vaults, read-only. Agents, Work board and FleetView are tabs here."},
-            {"sel": "#model", "n": 5, "at": "below", "dy": 8, "label": "Model: best (Opus, the strongest), deep (Sonnet, the middle one) or fast (Haiku, the cheapest)."},
+            {"sel": "#model", "n": 5, "at": "below", "dy": 8, "label": "Model: best (Claude Opus 5.5, the strongest), deep (Claude Sonnet 5, the middle one) or fast (Claude Haiku 4.5, the cheapest). Each is named in full so you know what you are running."},
             {"sel": "#layout-btn", "n": 6, "at": "below", "dy": 8, "label": "Layouts: 4 ready-made arrangements of all 10 panels, and your own."},
             {"sel": "#add-btn", "n": 7, "at": "below", "dy": 8, "label": "+ Panel: bring back any panel you closed, or pop one out."},
             {"sel": ".grp-actions", "n": 8, "at": "left", "dx": -18, "label": "Make a group fill the screen. Double-clicking a tab does the same; Esc puts it back."},
@@ -270,6 +277,7 @@ def main(work, out):
             {"sel": ".composer .stop", "n": 2, "at": "left", "label": "Stop: ends the answer. Jeeves keeps what was written so far."},
             {"sel": ".chat-head .orb-big", "n": 3, "at": "below", "dy": 16, "label": "The orb brightens while the answer comes in."},
             {"sel": "#status-line", "n": 4, "at": "right", "dx": 60, "label": "The status line under the name: what Claude is doing right now, for example \"Read: Today.md\"."},
+            {"sel": ".composer .send", "n": 5, "at": "left", "dx": -30, "label": "Send is greyed out until the answer finishes. Press Enter now and the reason appears at the bottom of the conversation, where you are looking."},
         ]
         raw = shoot_annotated(pg, "chat-answering.png", items, tmp, 1600)
         legend_png(draw, raw, items, save("chat-answering.png"), 1600)
@@ -277,7 +285,7 @@ def main(work, out):
         os.environ["FAKE_CLAUDE_DELAY"] = "0.01"
         items = [
             {"sel": ".msg.bot p:last-child .wl", "n": 1, "at": "below", "dy": 20, "label": "A link to another note (a note name in double square brackets): click it and the note opens in Vaults."},
-            {"sel": ".chat-head .sub", "n": 2, "at": "right", "dx": 30, "label": "What Chat may do: read and search, nothing else, unless you allow more in config.json."},
+            {"sel": ".chat-head .sub", "n": 2, "at": "right", "dx": 30, "label": "What Chat may do: 3 tools, all of them reading. No commands, no file changes, no internet, unless you allow more in config.json."},
             {"sel": ".ptools .newchat", "n": 3, "at": "top", "dy": -24, "label": "New conversation: Claude forgets the conversation and starts fresh."},
         ]
         raw = shoot_annotated(pg, "cockpit-chat.png", items, tmp, 1600)
@@ -393,14 +401,61 @@ def main(work, out):
         np_.evaluate("localStorage.clear()")
         np_.goto(base2 + "/")
         wait_ready(np_)
-        items = [{"sel": ".banner", "n": 1, "at": "left", "label": "No Claude Code: Chat says so and lists the 3 steps. Every other panel works."},
+        items = [{"sel": ".banner", "n": 1, "at": "left", "label": "No Claude Code: Chat says so, lists the 3 steps and links to the download page. Every other panel works."},
                  {"sel": "[data-card=people]", "n": 2, "at": "left", "label": "No Today.md yet: it says so, with the command that builds it."},
                  {"sel": "[data-card=decide]", "n": 3, "at": "right", "label": "No Recommendations file yet: it names the file to create."}]
         raw = shoot_annotated(np_, "new-member.png", items, tmp, 1600)
         legend_png(draw, raw, items, save("new-member.png"), 1600)
         n.close()
+
+        # the same setup, Chat on its own: the banner close up
+        nc = b.new_context(viewport={"width": 1400, "height": 820})
+        ncp = nc.new_page()
+        ncp.goto(base2 + "/?only=chat")
+        ncp.evaluate("localStorage.clear()")
+        ncp.goto(base2 + "/?only=chat")
+        wait_ready(ncp)
+        items = [
+            {"sel": ".banner a", "n": 1, "at": "right", "dx": 30, "label": "The address is a link: click it to open Claude Code's install page."},
+            {"sel": ".composer textarea", "n": 2, "at": "left", "dx": 8, "dy": -6, "label": "The text box and Send are switched off, and say so. The suggested questions are put away: they would only fill a box that cannot send."},
+        ]
+        raw = shoot_annotated(ncp, "no-claude.png", items, tmp, 1400)
+        legend_png(draw, raw, items, save("no-claude.png"), 1400)
+        nc.close()
         srv2.shutdown()
         srv2.server_close()
+
+        # a folder that is not there: every panel says the same thing
+        broken = json.loads(cfg_path.read_text(encoding="utf-8"))
+        # A made-up path that really does not exist on this computer, so the picture
+        # shows a member's folder name rather than the test folder this ran in.
+        broken["second_brain"] = DEMO_HOME + r"\Documents\Second Brain (on the old laptop)"
+        broken_path = work / "broken-config.json"
+        broken_path.write_text(json.dumps(broken), encoding="utf-8")
+        sessions.clear_cache()
+        srv3 = serve_in_thread(0, str(broken_path))
+        base3 = "http://127.0.0.1:%d" % srv3.server_address[1]
+        bctx = b.new_context(viewport={"width": 1600, "height": 1000})
+        bp = bctx.new_page()
+        bp.goto(base3 + "/")
+        bp.evaluate("localStorage.clear()")
+        bp.goto(base3 + "/")
+        wait_ready(bp)
+        time.sleep(1.0)
+        # the second-brain card sits under the CRM card in Today: bring it into view
+        bp.evaluate("() => { const e = document.querySelector('.card > .empty.gone');"
+                    " if (e) e.scrollIntoView({block: 'center'}); }")
+        time.sleep(0.4)
+        items = [
+            {"sel": "[data-card=brain] .empty.gone", "n": 1, "at": "left", "label": "Across everything: no counts, because a folder that is not there cannot be counted."},
+            {"sel": ".card > .empty.gone", "n": 2, "at": "left", "label": "Today: the folder it looked in, and the setting to correct."},
+            {"sel": ".vb-tabs button", "n": 3, "at": "below", "dy": 10, "label": "Vaults: the tab says (missing) too. All 3 panels agree."},
+        ]
+        raw = shoot_annotated(bp, "folder-missing.png", items, tmp, 1600)
+        legend_png(draw, raw, items, save("folder-missing.png"), 1600)
+        bctx.close()
+        srv3.shutdown()
+        srv3.server_close()
 
         # ---- diagrams ------------------------------------------------------------
         drawn("diagram-why.png", DIAGRAM_WHY)
@@ -454,6 +509,7 @@ DIAGRAM_TIMELINE = """<div class='wrap'><h1>How the original was built (June to 
         ("2026-07-08", "#e0a84a", "Paused: its timers kept starting Claude and using tokens."),
         ("2026-07-09", "#e0a84a", "Would not start: it needed a folder outside its own."),
         ("2026-09-22", "#3ecf8e", "This rebuild: no timers, nothing outside its folder, read-only chat by default."),
+        ("2026-09-23", "#3ecf8e", "Checked again: Chat given 3 reading tools and no others, models named in full, every panel honest about a folder that is not there."),
     ])
 
 DIAGRAM_COST = """<div class='wrap'><h1>What costs tokens, and what does not</h1>
@@ -468,7 +524,7 @@ DIAGRAM_COST = """<div class='wrap'><h1>What costs tokens, and what does not</h1
 <ul style='margin:6px 0;padding-left:1.2em;line-height:1.8'>
 <li>Each message you send in Chat starts Claude Code once</li>
 <li>Each run re-reads your rulebook (<code>CLAUDE.md</code>) and the conversation so far</li>
-<li>The model you pick changes the price: <code>fast</code> (Haiku) is cheapest, <code>deep</code> (Sonnet) the middle, <code>best</code> (Opus) strongest</li>
+<li>The model you pick changes the price: <code>fast</code> (Claude Haiku 4.5) is cheapest, <code>deep</code> (Claude Sonnet 5) the middle, <code>best</code> (Claude Opus 5.5) strongest</li>
 <li>Nothing else. There is no timer that starts Claude.</li></ul></div></div></div>"""
 
 DIAGRAM_FILES = """<div class='wrap'><h1>What is in the folder, and what Jeeves writes</h1>

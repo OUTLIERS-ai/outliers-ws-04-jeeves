@@ -11,7 +11,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const api = async (p) => { const r = await fetch(p); return r.json(); };
 const fmt = n => { n = +n || 0; if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B'; if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'; if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k'; return '' + n; };
-let CFG = { name: 'Jeeves', models: { best: 'opus', deep: 'sonnet', fast: 'haiku' } };
+let CFG = { name: 'Jeeves', models: { best: 'claude-opus-5-5', deep: 'claude-sonnet-5', fast: 'claude-haiku-4-5' } };
 let orbTop = null, orbBig = null;
 
 // ------------------------------------------------------------------ markdown
@@ -109,9 +109,11 @@ function chatPanel() {
   d.className = 'pane';
   const power = CFG.read_only === false
     ? 'It can read your notes and CRM, and you have allowed it to act (allow_actions in config.json).'
-    : 'It can read and search your notes and CRM. It cannot run commands, change files or use the internet unless you allow it in config.json.';
+    : 'It is given 3 tools and no others: open a file, search inside files, find files by name. '
+      + 'Running commands, changing files and the internet are switched off until you set '
+      + '"allow_actions": true in config.json.';
   d.innerHTML = `
-    <div class="ptools"><span class="hint">Answered by your own Claude Code, working in your second brain</span>
+    <div class="ptools"><span class="hint">Answered by your own Claude Code, in your second brain</span>
       <button class="sugg" title="Show the suggested questions">Suggestions</button>
       <button class="newchat" title="Start a fresh conversation">New conversation</button><button class="pop" title="Pop out">⧉</button></div>
     <div class="chat">
@@ -125,8 +127,23 @@ function chatPanel() {
     </div>`;
   return d;
 }
+// The saved conversation is shared by every window on this computer: the main
+// cockpit, a popped-out Chat, a second tab. Each window used to write its own whole
+// list over the other's, so a message sent in the pop-out was wiped the moment the
+// main window sent its next one. Now each window ADDS its own new lines to what is
+// already saved, and is told when another window adds one.
+const WINDOW_ID = Math.random().toString(36).slice(2, 8) + Date.now().toString(36);
+let lineNo = 0;
+const stampLine = it => { if (!it.id) it.id = WINDOW_ID + '-' + (++lineNo); return it; };
 function loadTranscript() { try { return JSON.parse(localStorage.getItem(TKEY) || '[]'); } catch (e) { return []; } }
-function saveTranscript(items) { try { localStorage.setItem(TKEY, JSON.stringify(items.slice(-200))); } catch (e) {} }
+function saveTranscript(mine) {
+  const saved = loadTranscript();
+  const seen = new Set(saved.map(x => x.id).filter(Boolean));
+  const merged = saved.concat(mine.filter(x => x.id && !seen.has(x.id))).slice(-200);
+  try { localStorage.setItem(TKEY, JSON.stringify(merged)); } catch (e) {}
+  return merged;
+}
+function clearTranscript() { try { localStorage.setItem(TKEY, '[]'); } catch (e) {} }
 function mountChat(el) {
   el.querySelector('.pop').onclick = () => popout('chat');
   const chat = $('.chat', el), log = $('.log', el), ta = $('textarea', el), send = $('.send', el), stopb = $('.stop', el), banner = $('.banner', el);
@@ -148,6 +165,15 @@ function mountChat(el) {
     if (it.role === 'err') return add('msg err', esc(it.text));
     return add('msg note', esc(it.text));
   };
+  // Redraw the whole conversation, including anything another window added.
+  const redrawAll = () => {
+    if (busy) return;                       // an answer is being written into this log
+    items = loadTranscript();
+    log.innerHTML = '';
+    items.forEach(draw);
+    compact();
+  };
+  window.addEventListener('storage', e => { if (e.key === TKEY) redrawAll(); });
   // Redraw what this browser remembers, and say honestly what Claude remembers.
   items.forEach(draw);
   if (CFG.chat_updated) {
@@ -158,24 +184,38 @@ function mountChat(el) {
       : `Claude is carrying on a conversation last answered ${w}, but its messages were not saved in this browser. New conversation starts fresh.`));
   }
   if (CFG.claude_found === false) {
+    // The address is a real link, and the suggestion buttons go away: they used to put
+    // their question into a text box that was switched off, with nothing said about why.
     banner.style.display = '';
     banner.innerHTML = `<b>Claude Code was not found on this computer, so Chat cannot answer.</b> Every other panel works.
-      <ol><li>Install Claude Code (https://code.claude.com/docs/en/setup).</li><li>Open a new terminal and type <code>claude</code> once to log in.</li><li>Stop Jeeves and start it again.</li></ol>
+      <ol><li>Install Claude Code: <a href="https://code.claude.com/docs/en/setup" target="_blank" rel="noopener">code.claude.com/docs/en/setup</a></li><li>Open a new terminal and type <code>claude</code> once to log in.</li><li>Stop Jeeves and start it again.</li></ol>
       If it is installed somewhere unusual, put its full path in <code>config.json</code> as <code>"claude_command"</code>.`;
     ta.disabled = true; send.disabled = true;
+    ta.placeholder = 'Chat is switched off until Claude Code is installed.';
+    $('.chips', el).innerHTML = '';
+    $('.sugg', el).style.display = 'none';
   }
   $('.newchat', el).onclick = async () => {
-    if (busy) { setStatus('Press Stop first, then New conversation.'); return; }
+    if (busy) { sayHere('Press Stop first, then New conversation.'); return; }
     await fetch('/api/chat/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session: SESSION }) });
-    log.innerHTML = ''; items = []; saveTranscript(items); CFG.chat_updated = null; compact(); setStatus('New conversation.');
+    log.innerHTML = ''; items = []; clearTranscript(); CFG.chat_updated = null; compact(); setStatus('New conversation.');
+  };
+  // Why a key press did nothing, said where the member is looking. The status line in
+  // the top bar was 921 px away from the text box on a 1000 px-tall screen.
+  const sayHere = t => {
+    const old = log.querySelector('.msg.note.live'); if (old) old.remove();
+    const m = add('msg note live', esc(t));
+    setStatus(t);
+    return m;
   };
   async function go(again) {
     const text = (again || ta.value).trim(); if (!text) return;
-    if (busy) { setStatus('Still answering. Wait for it to finish, or press Stop.'); return; }
+    if (busy) { sayHere('Still answering. Wait for that answer to finish, or press Stop.'); return; }
     busy = true; stopping = false;
+    const live = log.querySelector('.msg.note.live'); if (live) live.remove();
     if (!again) ta.value = '';
     ta.style.height = 'auto';
-    add('msg you', esc(text)); items.push({ role: 'you', text });
+    add('msg you', esc(text)); items.push(stampLine({ role: 'you', text }));
     const bot = add('msg bot', '<span class="dim">Thinking…</span>');
     let acc = '', gotText = false, failed = null, stopped = false;
     const acts = [];
@@ -200,15 +240,15 @@ function mountChat(el) {
         }
       }
     } catch (e) { if (!stopping) failed = { code: 'connection', text: 'Lost the connection to Jeeves: ' + e }; else stopped = true; }
-    acts.forEach(a => items.push({ role: 'act', text: a }));
+    acts.forEach(a => items.push(stampLine({ role: 'act', text: a })));
     if (stopped || (stopping && !acc && !failed)) {
-      if (!acc) bot.remove(); else items.push({ role: 'bot', text: acc });
+      if (!acc) bot.remove(); else items.push(stampLine({ role: 'bot', text: acc }));
       const t = acc ? 'Stopped. The part above is what Claude had written.' : 'Stopped before Claude wrote anything.';
-      add('msg note', esc(t)); items.push({ role: 'stopped', text: t });
+      add('msg note', esc(t)); items.push(stampLine({ role: 'stopped', text: t }));
       setStatus('Stopped.');
     } else if (failed) {
       // Claude sometimes writes the error as its answer too: show it once, not twice.
-      if (!acc.trim() || acc.trim() === (failed.text || '').trim()) bot.remove(); else items.push({ role: 'bot', text: acc });
+      if (!acc.trim() || acc.trim() === (failed.text || '').trim()) bot.remove(); else items.push(stampLine({ role: 'bot', text: acc }));
       const plain = FRIENDLY[failed.code] || 'The reply failed.';
       const e = add('msg err', `${esc(plain)}<details><summary>Details</summary>${esc(failed.text || '')}</details>`);
       if (failed.code !== 'busy' && failed.code !== 'not_found') {
@@ -216,16 +256,18 @@ function mountChat(el) {
         b.onclick = () => { b.disabled = true; go(text); };
         e.appendChild(b);
       }
-      items.push({ role: 'err', text: plain });
+      items.push(stampLine({ role: 'err', text: plain }));
       setStatus(failed.code === 'busy' ? 'Still answering your last message.' : 'Last reply failed. Details are in the chat.');
     } else {
       if (!acc) bot.innerHTML = '<span class="dim">(Claude finished without writing anything)</span>';
-      else items.push({ role: 'bot', text: acc });
+      else items.push(stampLine({ role: 'bot', text: acc }));
       CFG.chat_updated = new Date().toISOString();
       setStatus('Ready.');
     }
-    saveTranscript(items);
+    const before = items.length;
+    items = saveTranscript(items);
     orbs('idle'); busy = false; send.disabled = false; stopb.style.display = 'none';
+    if (items.length !== before) redrawAll();   // another window added a message meanwhile
   }
   send.onclick = () => go();
   stopb.onclick = () => { stopping = true; setStatus('Stopping…'); fetch('/api/chat/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session: SESSION }) }); };
@@ -236,6 +278,15 @@ function mountChat(el) {
 }
 
 // ------------------------------------------------------------------ Today
+// A folder that is not there is never reported as a quiet day. The Today panel used
+// to say "Nothing has moved and nothing is left open" while the Vaults panel 300 px
+// below it said the folder did not exist, and the loudest of the two was the wrong one.
+function missingFolder(path, setting) {
+  return `<div class="empty gone">Your ${setting === 'crm_vault' ? 'CRM' : 'second brain'} folder is not there:
+    <code class="sel">${esc(path || '(not set)')}</code><br>
+    Nothing can be read from it, so no count below is a real answer. Check
+    <code>"${setting}"</code> in <code>config.json</code>, or plug the drive back in.</div>`;
+}
 const noteName = p => esc(String(p).split('/').pop().replace(/\.md$/, ''));
 const noteDir = p => String(p).includes('/') ? esc(String(p).slice(0, String(p).lastIndexOf('/'))) : '';
 async function renderToday(body) {
@@ -243,12 +294,15 @@ async function renderToday(body) {
   let h = '';
   if (d.crm) {
     h += `<div class="card"><h3>From your CRM${d.crm.built ? ' · built ' + esc(d.crm.built) : ''}</h3>`;
-    h += d.crm.found ? md(d.crm.text) : `<div class="empty">${esc(d.crm.hint)}</div>`;
+    h += d.crm.found ? md(d.crm.text)
+      : (d.crm.exists === false ? missingFolder(d.crm.vault, 'crm_vault')
+        : `<div class="empty">${esc(d.crm.hint)}</div>`);
     h += '</div>';
   } else h += '<div class="empty">No CRM folder is set in config.json, so there is no ranked list of people here.</div>';
   const b = d.brain;
   if (b) {
     h += '<div class="card"><h3>From your second brain</h3>';
+    if (b.found === false) return void (body.innerHTML = h + missingFolder(b.path, 'second_brain') + '</div>');
     if (b.daily) h += `<div class="dim">${esc(b.daily.path)}</div>` + md(b.daily.text);
     if (b.moved.length) h += '<div class="muted" style="margin-top:6px">Moved in the last 3 days</div><ul class="links">' + b.moved.map(m => `<li><span class="dim">${esc(m.when)}</span> <span class="wl" data-note="${esc(m.path)}">${noteName(m.path)}</span> <span class="dim">${noteDir(m.path)}</span></li>`).join('') + '</ul>';
     if (b.open.length) h += '<div class="muted" style="margin-top:6px">Left unfinished</div><ul>' + b.open.map(o => `<li>☐ ${inline(o.text)} <span class="dim">·</span> <span class="wl" data-note="${esc(o.path)}">${noteName(o.path)}</span></li>`).join('') + '</ul>';
@@ -260,7 +314,7 @@ async function renderToday(body) {
 
 // ------------------------------------------------------------------ Vault browser
 function vaultPanel() {
-  const d = shell('Read-only. Type to filter note names; press Enter to search inside every note in both vaults.', 'flush');
+  const d = shell('Read-only. Type to filter names · Enter searches inside notes', 'flush');
   d.querySelector('.pbody').innerHTML = `<div class="vb"><div class="vb-side"><div class="vb-tabs"></div>
     <input type="search" placeholder="Filter names…" title="Type to filter this vault by note name. Press Enter to search inside every note in both vaults."><div class="vb-list"></div></div><div class="vb-note"><div class="empty">Pick a note on the left.</div></div></div>`;
   return d;
@@ -435,6 +489,7 @@ async function renderOverview(body) {
   jobs.push(safe('/api/today').then(td => {
     let h;
     if (!td.crm) h = '<div class="muted">No CRM folder is set in config.json.</div>';
+    else if (td.crm.exists === false) h = missingFolder(td.crm.vault, 'crm_vault');
     else if (!td.crm.found) h = '<div class="muted">Your CRM has no <code>Today.md</code> yet. Build it in your CRM folder with <code>python _engine/today.py --write</code>.</div>';
     else {
       const rows = crmPeople(td.crm.text);
@@ -443,7 +498,9 @@ async function renderOverview(body) {
       else h = '<div class="muted">Nobody is waiting on you today.</div>';
     }
     fill('people', h);
-    fill('brain', td.brain ? `<div class="kv"><span class="muted">Notes moved (3 days)</span><b>${td.brain.moved.length}</b><span class="muted">Left unfinished</span><b>${td.brain.open.length}</b><span class="muted">Daily note today</span><b>${td.brain.daily ? 'yes' : 'no'}</b></div>` : '<div class="muted">No second brain is set in config.json.</div>');
+    fill('brain', !td.brain ? '<div class="muted">No second brain is set in config.json.</div>'
+      : td.brain.found === false ? missingFolder(td.brain.path, 'second_brain')
+        : `<div class="kv"><span class="muted">Notes moved (3 days)</span><b>${td.brain.moved.length}</b><span class="muted">Left unfinished</span><b>${td.brain.open.length}</b><span class="muted">Daily note today</span><b>${td.brain.daily ? 'yes' : 'no'}</b></div>`);
   }));
   jobs.push(safe('/api/inbox').then(ib => {
     if (!ib.found) { fill('decide', `<div class="muted">No Recommendations file yet. Create <code>${esc((ib.looked_for || ['Inbox/Recommendations.md'])[0])}</code> in your second brain.</div>`); return; }
@@ -468,7 +525,7 @@ document.addEventListener('click', e => {
 // ------------------------------------------------------------------ the dock
 const PANELS = {
   chat:     { title: 'Chat',               make: chatPanel, mount: el => mountChat(el) },
-  overview: { title: 'Across everything',  make: () => shell('What is moving across your CRM, notes, agents and apps. Click a heading to open its panel.'), render: renderOverview },
+  overview: { title: 'Across everything',  make: () => shell('What is moving, everywhere. Click a heading to open its panel.'), render: renderOverview },
   today:    { title: 'Today',              make: () => shell('Your CRM’s Today.md and your second brain’s day'), render: renderToday },
   inbox:    { title: 'Recommendations',    make: () => shell('A markdown file in your second brain that you and your agents write to'), render: renderInbox },
   vaults:   { title: 'Vaults',             make: vaultPanel, mount: el => mountVault(el) },

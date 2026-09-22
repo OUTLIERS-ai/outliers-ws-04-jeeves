@@ -6,7 +6,7 @@
   "agents_dirs": ["C:/path/to/your/.claude/agents"],
   "claude_home": "",
   "claude_command": "claude",
-  "models": {"best": "opus", "deep": "sonnet", "fast": "haiku"},
+  "models": {"best": "claude-opus-5-5", "deep": "claude-sonnet-5", "fast": "claude-haiku-4-5"},
   "default_model": "best",
   "permission_mode": "dontAsk",
   "allow_actions": false,

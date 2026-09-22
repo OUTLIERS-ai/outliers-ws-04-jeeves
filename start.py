@@ -19,6 +19,7 @@ after a restart that number can belong to any other program on the computer.
 import argparse
 import json
 import os
+import socket
 import sys
 import time
 import urllib.request
@@ -36,6 +37,27 @@ from jeeves.server import make_server  # noqa: E402
 
 def pid_file():
     return C.state_dir() / "jeeves.pid"
+
+
+def free_port(after, tries=60):
+    """A port nothing is listening on, counting up from the one that just failed.
+
+    The advice used to be the fixed text "--port 4041", so a member already on 4041
+    was told to try the port that had just refused them.
+    """
+    start_at = int(after or 4040)
+    for port in range(start_at + 1, start_at + 1 + tries):
+        if port > 65535:
+            break
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            s.bind(("127.0.0.1", port))
+            return port
+        except OSError:
+            continue
+        finally:
+            s.close()
+    return start_at + 1
 
 
 def who_is_on(port):
@@ -93,6 +115,12 @@ def main(argv=None):
     if a.stop:
         return stop(cfg_file)
     cfg = C.load(cfg_file)
+    # A config.json that cannot be read used to be reported as "No config.json yet",
+    # which sent members to the installer instead of to the line they had just typed.
+    broken = C.problem(cfg_file)
+    if broken:
+        print("  " + broken)
+        return 1
     if not cfg.get("second_brain"):
         print("  No config.json yet. Run:  python install.py")
         return 1
@@ -113,7 +141,7 @@ def main(argv=None):
                     pass
             return 0
         print("  Could not listen on port %s: %s" % (port, exc))
-        print("  Another program is using it. Try:  python start.py --port 4041")
+        print("  Another program is using it. Try:  python start.py --port %d" % free_port(port))
         return 1
     port = srv.server_address[1]
     C.atomic_write(pid_file(), "%d %d\n" % (os.getpid(), port))
