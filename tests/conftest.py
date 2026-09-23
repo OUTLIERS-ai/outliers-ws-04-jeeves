@@ -31,7 +31,14 @@ def fake_home(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(h / "AppData" / "Roaming"))
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(h / ".claude"))
     monkeypatch.setenv("JEEVES_STATE", str(tmp_path / "state"))
-    monkeypatch.delenv("JEEVES_CONFIG", raising=False)
+    # A made-up config.json inside the temporary folder. Without this, any check that
+    # forgot to name its own config fell back to the config.json next to start.py -- the
+    # member's real one -- and could read their real port. On 2026-09-23 that ended the
+    # Jeeves a member had open in a browser tab, halfway through `python -m pytest -q`.
+    # Port 1 is reserved, so nothing on the computer can answer on it.
+    stand_in = h / "config.json"
+    stand_in.write_text(json.dumps({"name": "Jeeves", "port": 1}), encoding="utf-8")
+    monkeypatch.setenv("JEEVES_CONFIG", str(stand_in))
     sessions.clear_cache()
     return h
 

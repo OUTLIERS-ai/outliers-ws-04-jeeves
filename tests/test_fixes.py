@@ -190,9 +190,39 @@ def test_start_says_jeeves_is_already_running(server, capsys):
     assert "already running" in capsys.readouterr().out
 
 
+# ---------------------------------------------------------------- the checks stay in their own folder
+
+def test_the_checks_read_a_config_inside_the_temporary_folder_only(tmp_path):
+    """Acceptance test 2026-09-23, fault 1. The guide says these checks "never touch your
+    real files". They did: with no JEEVES_CONFIG set, config.load() falls back to the
+    config.json next to start.py -- the member's own -- so a check could read their real
+    port and end the Jeeves they had open in a browser tab."""
+    from jeeves import config as C
+    p = C.config_path()
+    assert p != C.ROOT / "config.json", \
+        "the checks are reading the config.json next to start.py, which is the member's own"
+    assert tmp_path in p.parents, \
+        "the checks are reading %s, which is outside this check's temporary folder" % p
+
+
+def test_no_check_stops_jeeves_without_naming_its_own_config():
+    """Acceptance test 2026-09-23, fault 1. Stopping Jeeves without naming a config file
+    loads the member's real config.json, finds the Jeeves running on their real port and
+    ends it, mid-session, with no message. Every stop in these checks must name the config
+    file that check wrote."""
+    needle = "start." + "stop()"                  # built here so this line is not a match
+    bad = []
+    for f in sorted((ROOT / "tests").glob("test_*.py")):
+        for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if needle in line:
+                bad.append("%s line %d" % (f.name, n))
+    assert not bad, ("these checks stop Jeeves without naming their own config, so they end "
+                     "the member's running copy: " + ", ".join(bad))
+
+
 # ---------------------------------------------------------------- --stop and stale numbers
 
-def test_stop_never_kills_an_unrelated_program(tmp_path, capsys):
+def test_stop_never_kills_an_unrelated_program(tmp_path, capsys, world):
     """Security audit row 3: a stale jeeves.pid made --stop kill whatever now had that number."""
     import start
     from jeeves import config as C
@@ -200,7 +230,7 @@ def test_stop_never_kills_an_unrelated_program(tmp_path, capsys):
                                  creationflags=NO_WINDOW)
     try:
         C.atomic_write(start.pid_file(), "%d %d\n" % (bystander.pid, _free_port()))
-        start.stop()
+        start.stop(str(world))
         time.sleep(0.5)
         assert bystander.poll() is None, "an unrelated program was killed"
         assert not start.pid_file().exists()
@@ -223,7 +253,7 @@ def test_stop_stops_a_real_jeeves(world, tmp_path):
                 break
             except Exception:  # noqa: BLE001
                 time.sleep(0.2)
-        start.stop()
+        start.stop(str(world))
         p.wait(10)
         assert p.returncode is not None
     finally:
@@ -407,6 +437,25 @@ def test_a_config_saved_with_a_byte_order_mark_still_reads(tmp_path):
     p.write_text(json.dumps({"name": "Bertie"}), encoding="utf-8-sig")
     assert C.load(str(p))["name"] == "Bertie"
     assert C.problem(p) is None
+
+
+def test_an_agent_saved_with_a_byte_order_mark_still_shows_what_it_is_for(tmp_path):
+    """Acceptance test 2026-09-23, fault 9. Notepad, and PowerShell's
+    `Out-File -Encoding utf8`, put an invisible mark at the start of the file. The Agents
+    panel then showed a name and nothing else: no description, no model tag. The guide
+    promises the card says what each agent is for and which model it uses."""
+    from jeeves import agents as A
+    folder = tmp_path / "agents"
+    folder.mkdir()
+    (folder / "ledger-agent.md").write_text(
+        "---\nname: ledger-agent\n"
+        "description: Tidies bookkeeping notes and flags unreconciled months.\n"
+        "model: haiku\n---\n\nBody.\n", encoding="utf-8-sig")
+    rows = A.listing({"agents_dirs": [str(folder)], "claude_home": str(tmp_path / "none")})["agents"]
+    card = [r for r in rows if r["file"] == "ledger-agent.md"][0]
+    assert card["name"] == "ledger-agent"
+    assert card["description"] == "Tidies bookkeeping notes and flags unreconciled months."
+    assert card["model"] == "haiku"
 
 
 def test_the_installer_refuses_a_python_older_than_3_11(tmp_path, monkeypatch):

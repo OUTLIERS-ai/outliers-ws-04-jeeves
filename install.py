@@ -40,6 +40,7 @@ else:
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 LAUNCHER_NAME = "Jeeves.vbs"
 MIN_PY = (3, 11)
+DEFAULT_PORT = 4040
 # The 3 models the chat panel offers, named in full so FleetView can price them and
 # so a member knows exactly what they are running. Checked live on 2026-09-22.
 MODELS = {"best": "claude-opus-5-5", "deep": "claude-sonnet-5", "fast": "claude-haiku-4-5"}
@@ -122,6 +123,23 @@ def port_free(port):
         return False
     finally:
         s.close()
+
+
+def port_to_offer(wanted):
+    """The port to put in front of the member: the one asked for, or the next free one.
+
+    The guide says the port is "4040 unless another program is using it", which reads as
+    a check. There was none, so a member with anything already on 4040 -- another copy of
+    Jeeves, or any other program -- pressed Enter, got a config that cannot start, and
+    only found out at `python start.py`.
+    """
+    wanted = int(wanted)
+    if port_free(wanted):
+        return wanted
+    for p in range(wanted + 1, wanted + 61):
+        if p <= 65535 and port_free(p):
+            return p
+    return wanted
 
 
 # ------------------------------------------------------------------ launchers
@@ -303,8 +321,17 @@ def main(argv=None):
     agents = a.agents or ask("Where are your agents?", default_agents, a)
     agents = str(Path(os.path.expanduser(agents)).resolve()) if agents else ""
     port = a.port
+    # A port already in config.json is the member's own Jeeves, so it is busy on purpose:
+    # offer it back. Only the very first install looks for a free one.
+    default_port = int(old.get("port") or DEFAULT_PORT)
+    if not port and not old.get("port"):
+        offered = port_to_offer(default_port)
+        if offered != default_port:
+            say("  Port %d is already being used by another program, so Jeeves offers %d."
+                % (default_port, offered))
+        default_port = offered
     while not port:
-        got = ask("Which port should Jeeves use?", str(old.get("port", 4040)), a)
+        got = ask("Which port should Jeeves use?", str(default_port), a)
         try:
             port = int(got)
             if not 1024 <= port <= 65535:

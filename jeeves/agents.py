@@ -58,7 +58,11 @@ def listing(cfg):
             continue
         for f in sorted(folder.glob("*.md")):
             try:
-                fm = _front(f.read_text(encoding="utf-8", errors="replace")[:20000])
+                # utf-8-sig drops the invisible mark Notepad and PowerShell's
+                # `Out-File -Encoding utf8` put at the start of a file. Without it the
+                # first line reads as "<mark>---", the header is never found, and the
+                # card shows a name with no description and no model tag.
+                fm = _front(f.read_text(encoding="utf-8-sig", errors="replace")[:20000])
             except OSError:
                 continue
             rows.append({

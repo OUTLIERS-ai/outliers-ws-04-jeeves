@@ -102,3 +102,47 @@ def test_no_truncating_writes_on_existing_files():
         s = p.read_text(encoding="utf-8")
         for m in re.finditer(r"open\(([^)]*)[\"']w[\"']", s):
             assert "tmp" in m.group(1), "%s writes in place: %s" % (p.name, m.group(0))
+
+
+def test_the_installer_does_not_offer_a_port_another_program_is_using(world, tmp_path,
+                                                                     monkeypatch, capsys):
+    """Acceptance test 2026-09-23, fault 4. The guide says the port is "4040 unless another
+    program is using it", which reads as a check. There was none: with 4040 already taken
+    the installer still offered it, so pressing Enter wrote a config that cannot start and
+    the member only found out at `python start.py`."""
+    import importlib
+    import socket
+    monkeypatch.setenv("JEEVES_CONFIG", str(tmp_path / "out" / "config.json"))
+    import install as _i
+    importlib.reload(_i)               # CONFIG is read when the file is imported
+    taken = socket.socket()
+    taken.bind(("127.0.0.1", 0))
+    taken.listen(1)
+    busy = taken.getsockname()[1]
+    try:
+        monkeypatch.setattr(_i, "DEFAULT_PORT", busy)
+        w = json.loads(world.read_text(encoding="utf-8"))
+        # --yes takes every default, which is exactly what pressing Enter does.
+        rc = _i.main(["--yes", "--skip-claude-check", "--vault", w["second_brain"], "--crm", ""])
+        assert rc == 0
+        got = json.loads((tmp_path / "out" / "config.json").read_text(encoding="utf-8"))
+        assert got["port"] != busy, "the installer offered a port another program is using"
+        assert _i.port_free(got["port"]), "the port it offered is not free either"
+        assert "already being used" in capsys.readouterr().out
+    finally:
+        taken.close()
+
+
+def test_the_installer_keeps_the_port_you_already_chose(world, tmp_path, monkeypatch):
+    """The port in an existing config.json is the member's own running Jeeves, so it is
+    busy on purpose. A second install must still offer it back, not move them."""
+    import importlib
+    cfg = tmp_path / "out" / "config.json"
+    w = json.loads(world.read_text(encoding="utf-8"))
+    monkeypatch.setenv("JEEVES_CONFIG", str(cfg))
+    import install as _i
+    importlib.reload(_i)               # CONFIG is read when the file is imported
+    _i.main(["--yes", "--skip-claude-check", "--vault", w["second_brain"], "--crm", "",
+             "--port", "4555"])
+    _i.main(["--yes", "--skip-claude-check", "--vault", w["second_brain"], "--crm", ""])
+    assert json.loads(cfg.read_text(encoding="utf-8"))["port"] == 4555
