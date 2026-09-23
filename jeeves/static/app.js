@@ -415,17 +415,17 @@ async function renderTokens(body) {
   const d = await api('/api/tokens');
   const t = d.today, tot = t.total || 1;
   const row = (label, n) => `<div class="kv"><span class="muted">${label}</span><b>${fmt(n)}</b></div><div class="bar"><i style="width:${(100 * n / tot).toFixed(1)}%"></i></div>`;
-  let h = `<div class="card"><h3>Today · ${esc(d.date)}</h3><div class="big">${fmt(t.total)}</div><div class="dim" style="margin-bottom:8px">tokens across ${d.sessions_today} conversation(s)</div>
+  let h = `<div class="card"><h3>Today · ${esc(d.date)}</h3><div class="big">${fmt(t.total)}</div><div class="dim" style="margin-bottom:8px">tokens across ${d.sessions_today} conversation${d.sessions_today === 1 ? '' : 's'}</div>
     ${row('Conversation re-read (cache read)', t.cache_read)}${row('Saved for the next re-read (cache write)', t.cache_write)}${row('Written by Claude (output)', t.output)}${row('New input', t.input)}</div>`;
   const bm = Object.entries(d.by_model || {});
   if (bm.length) h += '<div class="card"><h3>By model, today</h3><div class="kv">' + bm.map(([m, v]) => `<span class="muted">${esc(m)}</span><b>${fmt(v.total)}</b>`).join('') + '</div></div>';
   h += `<div class="card"><h3>Last 5 hours</h3><div class="kv"><span class="muted">All tokens</span><b>${fmt(d.last_5_hours.total)}</b></div></div>`;
   const c = d.ccusage || {};
-  h += '<div class="card"><h3>Your 5-hour usage window (ccusage)</h3>';
+  h += `<div class="card"><h3>How much of your Claude plan's 5-hour allowance is left (needs the free ccusage program)</h3>`;
   if (!c.available) h += `<div class="muted">${esc(c.reason || 'not available')}</div>`;
   else if (!c.active) h += '<div class="muted">No window is open right now.</div>';
   else h += `<div class="kv"><span class="muted">Tokens in this window</span><b>${fmt(c.tokens)}</b><span class="muted">Window ends</span><b>${esc(new Date(c.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}</b><span class="muted">Minutes left</span><b>${esc(c.remaining_minutes ?? '?')}</b></div>`;
-  h += '</div><div class="dim">Most tokens are cache reads: Claude re-reading the conversation so far. They count towards the usage limits of your Claude plan but are the cheapest kind.</div>';
+  h += '</div><div class="dim">Most tokens are Claude re-reading the conversation so far, listed above as "Conversation re-read". They count towards the usage limits of your Claude plan but are the cheapest kind.</div>';
   body.innerHTML = h;
 }
 

@@ -60,7 +60,7 @@ def tree(cfg, key):
 
 
 def resolve(cfg, name, prefer=None):
-    """Which vault holds the note a [[link]] names: the second brain first, then the CRM.
+    """Which vault the note a [[link]] names is in: the second brain first, then the CRM.
 
     A link is a note name ("Tom Reyes"), sometimes with a folder ("People/Tom Reyes")
     or a heading ("Tom Reyes#Calls"). Returns {"key", "path"}, both None if no vault has it.

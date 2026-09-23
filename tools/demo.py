@@ -38,8 +38,8 @@ def brain(root, now):
       "Priya Shah Design. Asked about month-end help on 2 days' notice.\n")
     w(b / "Projects" / "Pricing review.md", "---\ntype: project\n---\n\n# Pricing review\n\n"
       "Moving from hourly to 3 fixed monthly packages.\n\n"
-      "| Package | Clients | Monthly |\n|---|---|---|\n| Books only | 6 | 180 |\n"
-      "| Books + VAT | 5 | 290 |\n| Full month-end | 3 | 450 |\n\n"
+      "| Package | Clients | Monthly |\n|---|---|---|\n| Books only | 6 | £180 |\n"
+      "| Books + VAT | 5 | £290 |\n| Full month-end | 3 | £450 |\n\n"
       "- [x] List every client's hours for August\n- [ ] Draft the letter to existing clients\n"
       "- [ ] Decide what happens to the 2 clients under 3 hours a month\n")
     w(b / "Meetings" / "Call with Tom Reyes.md", "# Call with Tom Reyes\n\n"
@@ -55,7 +55,7 @@ def brain(root, now):
       % now.strftime("%A %d %B"))
     w(b / "Inbox" / "Recommendations.md", "# Recommendations\n\n"
       "Your agents write here. You decide.\n\n"
-      "- [ ] **Raise the Books-only package to 195** - 4 of 6 clients are over their hours "
+      "- [ ] **Raise the Books-only package to £195** - 4 of 6 clients are over their hours "
       "(from the pricing agent, today)\n"
       "- [ ] **Turn the month-end checklist into a post** - 3 clients asked for it this month\n"
       "- [ ] **Chase 2 unpaid invoices** - both over 30 days (from the invoice chaser)\n")
@@ -82,12 +82,12 @@ _Generated {date} from the event log. Do not edit by hand: this page is rewritte
 | 4 | Leah Grant | Engaged with something you posted | 4 days ago |
 | 5 | Marcus Webb | Quiet, and due a word | 23 days ago |
 
-Ordered by how soon each reason goes stale. A reply ranks first
-because it goes stale fastest.
+Ordered by how fast each reason cools off. A reply ranks first
+because it cools fastest.
 
 ---
 
-- 1 person(s) left off because you picked those conversations up yourself.
+- 1 person left off because you picked that conversation up yourself.
 - 2 parked themselves after 30 days of silence. Nobody had to decide to give up on them.
 """
 
@@ -111,7 +111,7 @@ def agents(home):
     w(a / "month-end-helper.md", "---\nname: month-end-helper\ndescription: Walks one client's "
       "month-end: bank reconciliation, missing receipts, questions for the client.\n---\n\nHelp.\n")
     w(a / "follow-up-writer.md", "---\nname: follow-up-writer\ndescription: Writes a short "
-      "follow-up to one person in the CRM, using their note and the last thing they said.\n"
+      "follow-up to one person in the CRM, using their note and their last message.\n"
       "model: opus\n---\n\nWrite follow-ups.\n")
 
 

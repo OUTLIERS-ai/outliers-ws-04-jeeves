@@ -139,7 +139,7 @@ def _usual_place():
 
 
 def _read_only_settings():
-    """A small settings file holding the read-only deny rules, rewritten only if it changed."""
+    """A small settings file of refusals for the acting tools, rewritten only if it changed."""
     f = C.state_dir() / "read-only-settings.json"
     text = json.dumps({"permissions": {"deny": READ_ONLY_BLOCK}}, indent=1)
     try:
@@ -172,7 +172,7 @@ def build_args(cfg, model_key, session_key):
         # The acting tools as deny rules in a settings file: Claude Code's documentation
         # says deny rules apply to subagents too, so an agent Chat hands work to is
         # blocked in the same way. No add-on (MCP) servers are loaded either: their
-        # tools could send messages or change things elsewhere.
+        # tools could send messages or change files elsewhere.
         args += ["--settings", str(_read_only_settings()), "--strict-mcp-config"]
     crm = cfg.get("crm_vault")
     if crm:

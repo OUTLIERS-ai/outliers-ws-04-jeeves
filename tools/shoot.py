@@ -417,7 +417,7 @@ def main(work, out):
         wait_ready(ncp)
         items = [
             {"sel": ".banner a", "n": 1, "at": "right", "dx": 30, "label": "The address is a link: click it to open Claude Code's install page."},
-            {"sel": ".composer textarea", "n": 2, "at": "left", "dx": 8, "dy": -6, "label": "The text box and Send are switched off, and say so. The suggested questions are put away: they would only fill a box that cannot send."},
+            {"sel": ".composer textarea", "n": 2, "at": "left", "dx": 8, "dy": -6, "label": "The text box and Send are switched off, and say so. The suggested questions are put away, because they would only fill a box that cannot send."},
         ]
         raw = shoot_annotated(ncp, "no-claude.png", items, tmp, 1400)
         legend_png(draw, raw, items, save("no-claude.png"), 1400)
@@ -425,7 +425,7 @@ def main(work, out):
         srv2.shutdown()
         srv2.server_close()
 
-        # a folder that is not there: every panel says the same thing
+        # a folder that is not there: every panel says the same
         broken = json.loads(cfg_path.read_text(encoding="utf-8"))
         # A made-up path that really does not exist on this computer, so the picture
         # shows a member's folder name rather than the test folder this ran in.
@@ -478,10 +478,10 @@ DIAGRAM_WHY = """<div class='wrap'><h1>Jeeves reads 5 places and shows them on 1
 <p class='sub'>Jeeves only reads. Your CRM, your notes and Claude Code's own log files stay where they are.</p>
 <div style='display:grid;grid-template-columns:1fr 90px 1fr;align-items:center;gap:10px'>
 <div style='display:grid;gap:12px'>
-<div class='box'><h3>Your CRM vault</h3>who to speak to today (<code>Today.md</code>)</div>
+<div class='box'><h3>Your CRM: a folder of notes about people</h3>who to speak to today (<code>Today.md</code>)</div>
 <div class='box'><h3>Your second brain</h3>today's note, what changed, what is unticked</div>
 <div class='box'><h3>Claude Code's log files</h3>what it did today, and how many tokens</div>
-<div class='box'><h3>The folders that hold your agents</h3>every agent (<code>.claude/agents</code>) and what it is for</div>
+<div class='box'><h3>The folders your agents are kept in</h3>every agent (<code>.claude/agents</code>) and what it is for</div>
 <div class='box'><h3>Your other apps</h3>ProjectForge and FleetView, if running</div></div>
 <div style='font-size:64px;color:#c9a96a;text-align:center'>&rarr;</div>
 <div class='box' style='padding:26px'><h3>Jeeves, 1 page in your browser</h3>
@@ -501,15 +501,15 @@ DIAGRAM_TIMELINE = """<div class='wrap'><h1>How the original was built (June to 
     "<div style='width:14px;height:14px;border-radius:50%%;margin-top:6px;background:%s'></div>"
     "<div>%s</div></div>" % (d, c, t) for d, c, t in [
         ("2026-06-13", "#3ecf8e", "Local server on 127.0.0.1, port 4040. Claude Code answered every question. First panels."),
-        ("2026-06-13", "#e0a84a", "A cloned voice, PC control and a live terminal. All left out of this download."),
+        ("2026-06-13", "#e0a84a", "A copy of a narrator's voice, control of the mouse and keyboard, and a command window running inside the page. All 3 left out of this download."),
         ("2026-06-14 to 17", "#e0a84a", "A timer that started Claude every 15 minutes, and phone alerts (switched off the same day)."),
         ("2026-06-14 to 17", "#3ecf8e", "Lesson: fill each panel only once it is on screen. Default model back to the strongest."),
-        ("2026-06-20", "#3ecf8e", "A calm, minimal redesign rejected: 'Jeeves is a FULL UI - that's the point'. Across everything added."),
+        ("2026-06-20", "#3ecf8e", "A calm, stripped-back redesign was rejected: Ashley wanted every job Jeeves does on screen, not 4 boxes. The Across everything panel was added instead."),
         ("2026-06-21", "#3ecf8e", "The orb, drawn by the page itself. A 3-column layout went live."),
         ("2026-07-08", "#e0a84a", "Paused: its timers kept starting Claude and using tokens."),
         ("2026-07-09", "#e0a84a", "Would not start: it needed a folder outside its own."),
-        ("2026-09-22", "#3ecf8e", "This rebuild: no timers, nothing outside its folder, read-only chat by default."),
-        ("2026-09-23", "#3ecf8e", "Checked again: Chat given 3 reading tools and no others, models named in full, every panel honest about a folder that is not there."),
+        ("2026-09-22", "#3ecf8e", "This rebuild: no timers, nothing outside its folder, and a Chat that can only read your notes."),
+        ("2026-09-23", "#3ecf8e", "Checked again: Chat given 3 reading tools and no others, models named in full, and every panel names a folder that is not there."),
     ])
 
 DIAGRAM_COST = """<div class='wrap'><h1>What costs tokens, and what does not</h1>
@@ -532,21 +532,21 @@ DIAGRAM_FILES = """<div class='wrap'><h1>What is in the folder, and what Jeeves 
 %s</div>""" % cards([
     ("You run these", "<code>install.py</code> asks 4 questions and writes the settings<br><code>start.py</code> starts, stops, or says it is already running"),
     ("Written by the installer", "<code>config.json</code>: every setting<br><code>config.json.bak-&lt;date&gt;</code>: your old settings, when an answer changes<br><code>Start Jeeves (hidden).vbs</code> (Windows): start with no window"),
-    ("Written while it runs", "<code>state/chat-sessions.json</code>: the conversation number<br><code>state/jeeves.pid</code>: the ID of the running Jeeves, and its port<br><code>state/read-only-settings.json</code>: the blocked tools"),
+    ("Written while it runs", "<code>state/chat-sessions.json</code>: the conversation number<br><code>state/jeeves.pid</code>: the ID of the running Jeeves, and its port<br><code>state/read-only-settings.json</code>: the 7 tools that act, written down as refused, so a second Claude cannot use them either"),
     ("Only if you said yes", "<code>Jeeves.vbs</code> in your Startup folder (Windows)<br>a launch file in <code>Library/LaunchAgents</code> (Mac)<br>Removed by <code>python install.py --uninstall</code>"),
-    ("The program", "<code>jeeves/</code>: the server and the page<br><code>tests/</code>: checks on made-up data<br><code>tools/demo.py</code>: a made-up world to try first"),
+    ("The program", "<code>jeeves/</code>: the server and the page<br><code>tests/</code>: 70 checks on made-up data<br><code>tools/demo.py</code>: a made-up world to try first"),
     ("To read", "<code>README.md</code>, this guide in <code>guide/</code><br><code>WHAT-I-STOLE.md</code>: what it was built from, and the licences<br><code>config.example.json</code>: every setting with an example"),
 ], 3)
 
 DIAGRAM_FIT = """<div class='wrap'><h1>Where each change goes</h1>
 <p class='sub'>You ask your own Claude Code for the change; this is the file it will open.</p>
 %s</div>""" % cards([
-    ("config.json", "Name and orb words, models, what Chat may do, folders, your other apps' addresses. No code."),
+    ("config.json", "The assistant's name, the 2 lines of lettering around the circle of light, which Claude models to use, what Chat may do, your folders and your other apps' addresses. No code."),
     ("jeeves/static/app.js", "A new panel, buttons, the chat panel, the Layouts menu."),
-    ("jeeves/server.py", "A new address inside Jeeves that a panel reads its data from, for example your content engine's drafts."),
+    ("jeeves/server.py", "The code that fetches whatever a new panel shows, for example the drafts from your content engine."),
     ("Your second brain's CLAUDE.md", "How Claude behaves when it answers from Jeeves: where it may write, how it replies."),
     ("tests/", "A check for every change, on made-up data, so it cannot break quietly."),
-    ("Nothing in your vaults", "Jeeves reads them. Changes to your notes come from Claude (if allowed) or your agents."),
+    ("Nothing in your own note folders", "Jeeves reads them. Changes to your notes come from Claude (if allowed) or your agents."),
 ], 3)
 
 DIAGRAM_DOWNLOAD = """<div class='wrap' style='text-align:center'><h1>Download Jeeves</h1>
