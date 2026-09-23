@@ -63,6 +63,26 @@ Jeeves puts them on 1 screen and gives you 1 place to ask a question about any o
 
 Ashley's decision on what Jeeves is for, made on 2026-06-20: it is a full cockpit where every ability has its own panel, not a chat box with an orb. In his words: "Jeeves is a FULL UI - that's the point." (UI means user interface: the whole screen you work in.) This download keeps that: every panel stays, and the Layouts menu (top right of the page) arranges them for the screen you have.
 
+### What it is for
+
+Putting your day, both note folders, your agents and your Claude usage side by side on 1 page, with 1 chat box that asks your own Claude Code about any of them.
+
+### Works well when
+
+- **Your morning starts in 5 places.** Who to contact, what changed in your notes, what your agents are doing, what you have used today: all on 1 screen instead of 5.
+- **You want to ask a question about your own notes** without opening a terminal and without repeating who you are, because the answer comes from your own Claude Code with your rulebook already loaded.
+- **You want today's Claude usage beside the work that caused it**, rather than as a number with no story attached.
+- **You already run pieces 2 and 3 of 4.** The work board and FleetView appear inside 2 of the panels, so 3 of the 4 pieces share 1 browser tab.
+- **You have a second screen.** Pop the panels you watch out into their own windows and leave them there all day.
+
+### Does not work well when
+
+- **You expect it to remember.** Jeeves stores nothing of its own. Every panel reads your notes and Claude Code's log files fresh each time, and a chat message is kept only where Claude Code already keeps it. Nothing you type here builds up into a record you can search later.
+- **You treat the chat box as free.** Every message starts a real Claude Code run, which re-reads your `CLAUDE.md` rulebook and the conversation so far before it answers. 20 idle questions cost real usage; the reading panels cost none.
+- **You switch writing on and then ask it about notes you clipped from websites.** A clipped note can contain written instructions aimed at an AI, and an AI that is allowed to write may follow them. Out of the box Chat can only read, and that is why 2 separate settings stand between you and writing.
+- **Your notes are not files on this computer.** Jeeves reads markdown files on your own disk. If your notes live in a web app, there is nothing here for it to read, and the sensible move is not to install it yet.
+- **You want it away from your desk.** It answers on your own computer only. Ashley reached his from a phone, and that needed a private network of his own on top of everything in this guide.
+
 ## How we built it
 
 Ashley built the original Jeeves for himself in June 2026. Every date below comes from his build notes and records, and the pictures are his real screens. The download you get is a clean rebuild of the parts that worked, for your setup rather than his.
@@ -314,6 +334,8 @@ The Tokens panel's 4 kinds: **Conversation re-read** (cache read) is Claude re-r
 ![Starting Jeeves when it is already running. The number is the ID Windows gives the running Jeeves; you do not need it](img/terminal-already-running.png)
 
 ## Fit it to your own AI system
+
+This download is a starting point, not a finished product. It is yours now: change it until it matches how you work. Ashley's own Jeeves went a long way past what you have here. It had 8 colour themes, including a light theme for daytime. It had real PowerShell terminals running inside the page, so he could watch a build without leaving it. It had a command menu opened from the keyboard, panels popped out across 3 monitors, and a phone version he installed on his Samsung and reached over a private network of his own. When a redesign came back calmer and simpler, with 1 orb and 4 cards, he rejected it in 1 line: "Jeeves is a FULL UI - that's the point." That is the useful part of the story. He did not accept somebody else's idea of what his own screen was for, and neither should you.
 
 Each of these is a change you can ask your own Claude Code to make. Open a terminal in the `outliers-ws-04-jeeves` folder, type `claude`, and paste the prompt. Afterwards, run the automatic checks that come with Jeeves (`python -m pytest -q`; pytest is a Python checking program, installed with `pip install pytest` if missing) and restart Jeeves.
 
