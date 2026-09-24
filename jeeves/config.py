@@ -8,7 +8,12 @@ whole program somewhere else by setting JEEVES_CONFIG to another file.
 
 import json
 import os
+import sys
 from pathlib import Path
+
+# The command a member types to run Python. A Mac has python3 and no python, so a
+# printed "python start.py" fails there with "command not found".
+PY = "python3" if sys.platform == "darwin" else "python"
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -98,8 +103,8 @@ def problem(path=None):
         if line:
             where = "\n  Look at line %d:  %s" % (line, text.splitlines()[line - 1].strip()[:90])
         return ("%s could not be read: %s%s\n"
-                "  Fix that line, or run  python install.py  to write a fresh one."
-                % (p, exc.msg if hasattr(exc, "msg") else exc, where))
+                "  Fix that line, or run  %s install.py  to write a fresh one."
+                % (p, exc.msg if hasattr(exc, "msg") else exc, where, PY))
     if not isinstance(data, dict):
         return "%s could not be read: it must start with { and end with }." % p
     return None

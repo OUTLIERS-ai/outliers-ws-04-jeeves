@@ -51,6 +51,8 @@ DEFAULT_PORT = 4040
 # so a member knows exactly what they are running. Checked live on 2026-09-22.
 MODELS = {"best": "claude-opus-5-5", "deep": "claude-sonnet-5", "fast": "claude-haiku-4-5"}
 PLIST_NAME = "ai.outliers.jeeves.plist"
+# The command a member types to run Python: a Mac has python3 and no plain python.
+PY = "python3" if sys.platform == "darwin" else "python"
 
 
 def too_old(info):
@@ -231,8 +233,8 @@ def belongs_here(path):
 
 def not_ours(target):
     return ("Another Jeeves folder already starts by itself when the computer starts (%s)."
-            % target + "\n  Left as it is. To move it to this folder, run  python install.py"
-            " --uninstall  in that folder first.")
+            % target + "\n  Left as it is. To move it to this folder, run  %s install.py" % PY
+            + " --uninstall  in that folder first.")
 
 
 def install_launcher():
@@ -326,7 +328,7 @@ def copy_to(dest, port=None):
         except ValueError:
             old = {}
     if not old.get("second_brain"):
-        say("Install this Jeeves first (python install.py), then make the copy.",
+        say("Install this Jeeves first (%s install.py), then make the copy." % PY,
             "Nothing has been changed.", "")
         return 1
     if dest == HERE or HERE in dest.parents:
@@ -354,7 +356,7 @@ def copy_to(dest, port=None):
     if os.name == "nt":
         atomic_write(dest / "Start Jeeves (hidden).vbs", vbs_text(dest, dest / "config.json"))
         say("Its own Start Jeeves (hidden).vbs starts the copy, not this one.")
-    say("", "Start the copy:", "", "    cd %s" % dest, "    python start.py", "",
+    say("", "Start the copy:", "", "    cd %s" % dest, "    %s start.py" % PY, "",
         "It opens http://127.0.0.1:%d/ . Ctrl+C in that terminal stops it." % port, "")
     return 0
 
@@ -483,7 +485,7 @@ def main(argv=None):
         # 4041 was being told to try the port that had just refused them.
         spare = next((p for p in range(port + 1, port + 60) if port_free(p)), port + 1)
         say("  Port %d is busy right now. Jeeves will say so when it starts; pick another "
-            "with python install.py --port %d" % (port, spare))
+            "with %s install.py --port %d" % (port, PY, spare))
 
     # 4. One config file. Keep anything you added by hand.
     cfg = dict(old)
@@ -523,11 +525,11 @@ def main(argv=None):
         say(install_launcher())
     else:
         say("Jeeves will not start by itself when the computer starts. "
-            "Start it yourself with:  python start.py")
+            "Start it yourself with:  %s start.py" % PY)
 
     say("", "-" * 66,
         "Done. Start it now:", "",
-        "    python start.py", "",
+        "    %s start.py" % PY, "",
         "Your browser opens http://127.0.0.1:%d/ . You should see the orb top left," % port,
         "Chat on the left, Today in the middle and Across everything on the right.",
         "On a laptop: Chat on the left and a stack of tabs on the right.",

@@ -123,7 +123,7 @@ def main(argv=None):
         print("  " + broken)
         return 1
     if not cfg.get("second_brain"):
-        print("  No config.json yet. Run:  python install.py")
+        print("  No config.json yet. Run:  %s install.py" % C.PY)
         return 1
     try:
         srv = make_server(a.port, cfg_file)
@@ -134,7 +134,7 @@ def main(argv=None):
             url = "http://127.0.0.1:%d/" % int(port)
             print("  Jeeves is already running at %s (process %d). Not starting a second copy."
                   % (url, h["pid"]))
-            print("  To stop it:  python start.py --stop")
+            print("  To stop it:  %s start.py --stop" % C.PY)
             if not a.no_open:
                 try:
                     webbrowser.open(url)
@@ -142,7 +142,7 @@ def main(argv=None):
                     pass
             return 0
         print("  Could not listen on port %s: %s" % (port, exc))
-        print("  Another program is using it. Try:  python start.py --port %d" % free_port(port))
+        print("  Another program is using it. Try:  %s start.py --port %d" % (C.PY, free_port(port)))
         return 1
     port = srv.server_address[1]
     C.atomic_write(pid_file(), "%d %d\n" % (os.getpid(), port))
