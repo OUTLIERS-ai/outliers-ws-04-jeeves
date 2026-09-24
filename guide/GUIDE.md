@@ -119,7 +119,7 @@ Ashley built the original Jeeves for himself in June 2026. Every date below come
 
 A new design went through Ashley's usual review: research, a first plan, a written critique of it, a second plan, a second critique and a final plan. It proposed a "calm butler" design: 1 orb, 1 conversation, at most 4 boxes of information, with the command windows and the agent map removed. Ashley's verdict: "it looks better but it uses most of the current usability" (he meant it loses most of what he could do with it), then "Jeeves is a FULL UI - that's the point". The plan was corrected to keep every panel and add a column that sums up what is moving across conversations, projects, outreach and agents. In this download that column is the **Across everything** panel.
 
-![The corrected design, live on 2026-06-21: on the left a column called "What needs you", with a box called "Across everything" that sums up what is moving; the conversation in the middle; Today on the right](img/original-3-column-2026-06-21.png)
+![The corrected design, live on 2026-06-21: on the left a column called "What needs you", with a box called "Across everything" that sums up what is moving; the conversation on the right. The Today column that stood further right is cropped off, because it named real people](img/original-3-column-2026-06-21.png)
 
 ### 2026-06-20 to 21, overnight: the orb
 
