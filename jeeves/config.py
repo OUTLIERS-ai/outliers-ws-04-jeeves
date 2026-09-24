@@ -15,9 +15,18 @@ from pathlib import Path
 # printed "python start.py" fails there with "command not found".
 PY = "python3" if sys.platform == "darwin" else "python"
 
-# Where the Work board and FleetView are downloaded from. A Mac member gets the Mac
-# copy of each (its name ends in -mac); the Windows repos print Windows commands.
-APP_REPO = "https://github.com/OUTLIERS-ai/%s" + ("-mac" if sys.platform == "darwin" else "")
+# Where the Work board and FleetView are downloaded from. The Mac copy of each (its name
+# ends in -mac) prints Mac commands, but it is not published yet. Until it is, a Mac member
+# is sent to the same repo as a Windows member, whose code also runs on a Mac. The Mac build
+# plan's wave 6 publishes the Mac copies and sets this 1 line to True; nothing else changes.
+MAC_REPOS_PUBLISHED = False
+
+
+def app_repo(name, mac=None):
+    """The address to download the app `name` from, on this computer (or on a Mac if mac=True)."""
+    mac = sys.platform == "darwin" if mac is None else mac
+    return "https://github.com/OUTLIERS-ai/" + name + ("-mac" if mac and MAC_REPOS_PUBLISHED else "")
+
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -41,8 +50,8 @@ DEFAULTS = {
     "inbox_file": "",
     "daily_note_folders": ["Daily", "Daily Notes", "Journal", "Diary", "Calendar"],
     "apps": {
-        "projectforge": {"url": "http://127.0.0.1:3020", "repo": APP_REPO % "outliers-ws-03-projectforge"},
-        "fleetview": {"url": "http://127.0.0.1:3010", "repo": APP_REPO % "outliers-ws-02-fleetview"},
+        "projectforge": {"url": "http://127.0.0.1:3020", "repo": app_repo("outliers-ws-03-projectforge")},
+        "fleetview": {"url": "http://127.0.0.1:3010", "repo": app_repo("outliers-ws-02-fleetview")},
     },
     "ccusage": "auto",
     "orb": {"inner": "At your service", "outer": "Your second brain is listening"},

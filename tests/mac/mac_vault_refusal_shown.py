@@ -77,3 +77,19 @@ def test_the_page_shows_the_refusal_instead_of_missing():
     js = (ROOT / "jeeves" / "static" / "app.js").read_text(encoding="utf-8")
     assert "function missingFolder(path, setting, refused)" in js
     assert js.count("missingFolder(") >= 5 and "t.refused" in js
+
+
+def test_the_advice_keeps_each_folder_s_own_name(tmp_path, monkeypatch):
+    """A refused CRM must not be told to move to ~/Second Brain: that is the second brain's place.
+    The advice names the folder's own name in the home folder (second read, 2026-09-24)."""
+    from jeeves import vaults
+    crm = tmp_path / "Documents" / "Priya Shah CRM"
+    crm.mkdir(parents=True)
+
+    def no_listdir(p="."):
+        raise PermissionError(errno.EPERM, "Operation not permitted", str(p))
+
+    monkeypatch.setattr(os, "listdir", no_listdir)
+    text = vaults.refused(crm)
+    assert str(Path.home() / "Priya Shah CRM") in text, text
+    assert "Second Brain" not in text, text

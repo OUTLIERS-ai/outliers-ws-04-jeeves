@@ -34,7 +34,7 @@ def refused(root):
         return ("macOS refused access to %s. Jeeves cannot read it, so nothing below is a real "
                 "answer. A program that starts by itself may be refused the Documents folder: move "
                 "the folder out of Documents, for example to %s, and put its new place in "
-                "config.json." % (root, Path.home() / "Second Brain"))
+                "config.json." % (root, Path.home() / Path(root).name))
     except OSError:
         return ""
     return ""
