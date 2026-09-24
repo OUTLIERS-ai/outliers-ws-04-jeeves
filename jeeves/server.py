@@ -192,6 +192,8 @@ def public_config(cfg):
         "read_only": chat.read_only(cfg),
         "chat_updated": chat.last_updated("main"),
         "chat_timeout_seconds": cfg.get("chat_timeout_seconds"),
+        # the command this computer runs Python with, for commands the page prints
+        "python": "python3" if sys.platform == "darwin" else "python",
     }
 
 

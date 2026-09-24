@@ -490,7 +490,7 @@ async function renderOverview(body) {
     let h;
     if (!td.crm) h = '<div class="muted">No CRM folder is set in config.json.</div>';
     else if (td.crm.exists === false) h = missingFolder(td.crm.vault, 'crm_vault');
-    else if (!td.crm.found) h = '<div class="muted">Your CRM has no <code>Today.md</code> yet. Build it in your CRM folder with <code>python _engine/today.py --write</code>.</div>';
+    else if (!td.crm.found) h = '<div class="muted">Your CRM has no <code>Today.md</code> yet. Build it in your CRM folder with <code>' + esc(CFG.python || 'python') + ' _engine/today.py --write</code>.</div>';
     else {
       const rows = crmPeople(td.crm.text);
       if (rows.length) h = '<ul>' + rows.slice(0, 4).map(r => `<li><span class="wl" data-vault="crm" data-note="${esc(r.who)}">${esc(r.who)}</span> <span class="muted">· ${inline(r.why)}</span></li>`).join('') + '</ul>' + (rows.length > 4 ? `<button class="cardlink small" data-open="today">and ${rows.length - 4} more in Today ›</button>` : '');

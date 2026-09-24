@@ -7,6 +7,7 @@ checked to be inside the vault it names, so a crafted address such as
 """
 
 import re
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -211,7 +212,8 @@ def today(cfg, now=None):
                                   "in config.json." % root}
         else:
             out["crm"] = {"found": False, "exists": True, "vault": str(root),
-                          "hint": "No Today.md yet. In your CRM folder run: python _engine/today.py --write"}
+                          "hint": "No Today.md yet. In your CRM folder run: %s _engine/today.py --write"
+                                  % ("python3" if sys.platform == "darwin" else "python")}
 
     if "brain" in vm:
         root = vm["brain"][1]
