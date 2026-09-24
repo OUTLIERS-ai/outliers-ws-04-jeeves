@@ -103,9 +103,12 @@ def pointer(name):
 
 
 def guess_brain():
-    return pointer(".outliers-sb") or next(
-        (str(p) for p in (home() / "Documents" / "Second Brain", home() / "Second Brain")
-         if p.is_dir()), "")
+    # A Mac looks outside Documents first: macOS may refuse a program that starts by itself
+    # access to ~/Documents, so the Mac guides put the Second Brain at ~/Second Brain.
+    places = (home() / "Documents" / "Second Brain", home() / "Second Brain")
+    if sys.platform == "darwin":
+        places = places[::-1]
+    return pointer(".outliers-sb") or next((str(p) for p in places if p.is_dir()), "")
 
 
 def guess_crm():
