@@ -281,7 +281,9 @@ function mountChat(el) {
 // A folder that is not there is never reported as a quiet day. The Today panel used
 // to say "Nothing has moved and nothing is left open" while the Vaults panel 300 px
 // below it said the folder did not exist, and the loudest of the two was the wrong one.
-function missingFolder(path, setting) {
+function missingFolder(path, setting, refused) {
+  // macOS refused Jeeves the folder: say so, never that it is missing (the server's words).
+  if (refused) return `<div class="empty gone">${esc(refused)}</div>`;
   return `<div class="empty gone">Your ${setting === 'crm_vault' ? 'CRM' : 'second brain'} folder is not there:
     <code class="sel">${esc(path || '(not set)')}</code><br>
     Nothing can be read from it, so no count below is a real answer. Check
@@ -295,14 +297,14 @@ async function renderToday(body) {
   if (d.crm) {
     h += `<div class="card"><h3>From your CRM${d.crm.built ? ' · built ' + esc(d.crm.built) : ''}</h3>`;
     h += d.crm.found ? md(d.crm.text)
-      : (d.crm.exists === false ? missingFolder(d.crm.vault, 'crm_vault')
+      : (d.crm.exists === false ? missingFolder(d.crm.vault, 'crm_vault', d.crm.refused)
         : `<div class="empty">${esc(d.crm.hint)}</div>`);
     h += '</div>';
   } else h += '<div class="empty">No CRM folder is set in config.json, so there is no ranked list of people here.</div>';
   const b = d.brain;
   if (b) {
     h += '<div class="card"><h3>From your second brain</h3>';
-    if (b.found === false) return void (body.innerHTML = h + missingFolder(b.path, 'second_brain') + '</div>');
+    if (b.found === false) return void (body.innerHTML = h + missingFolder(b.path, 'second_brain', b.refused) + '</div>');
     if (b.daily) h += `<div class="dim">${esc(b.daily.path)}</div>` + md(b.daily.text);
     if (b.moved.length) h += '<div class="muted" style="margin-top:6px">Moved in the last 3 days</div><ul class="links">' + b.moved.map(m => `<li><span class="dim">${esc(m.when)}</span> <span class="wl" data-note="${esc(m.path)}">${noteName(m.path)}</span> <span class="dim">${noteDir(m.path)}</span></li>`).join('') + '</ul>';
     if (b.open.length) h += '<div class="muted" style="margin-top:6px">Left unfinished</div><ul>' + b.open.map(o => `<li>☐ ${inline(o.text)} <span class="dim">·</span> <span class="wl" data-note="${esc(o.path)}">${noteName(o.path)}</span></li>`).join('') + '</ul>';
@@ -352,7 +354,7 @@ async function mountVault(el) {
     tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.k === key));
     const t = await api('/api/vault/tree?v=' + encodeURIComponent(key));
     VB.files = t.files || [];
-    if (t.exists === false) list.innerHTML = '<div class="empty" style="margin:8px">That folder does not exist. Check the path in config.json.</div>'; else draw();
+    if (t.exists === false) list.innerHTML = t.refused ? `<div class="empty" style="margin:8px">${esc(t.refused)}</div>` : '<div class="empty" style="margin:8px">That folder does not exist. Check the path in config.json.</div>'; else draw();
   };
   const search = async (text) => {
     q.value = text;
@@ -489,7 +491,7 @@ async function renderOverview(body) {
   jobs.push(safe('/api/today').then(td => {
     let h;
     if (!td.crm) h = '<div class="muted">No CRM folder is set in config.json.</div>';
-    else if (td.crm.exists === false) h = missingFolder(td.crm.vault, 'crm_vault');
+    else if (td.crm.exists === false) h = missingFolder(td.crm.vault, 'crm_vault', td.crm.refused);
     else if (!td.crm.found) h = '<div class="muted">Your CRM has no <code>Today.md</code> yet. Build it in your CRM folder with <code>' + esc(CFG.python || 'python') + ' _engine/today.py --write</code>.</div>';
     else {
       const rows = crmPeople(td.crm.text);
@@ -499,7 +501,7 @@ async function renderOverview(body) {
     }
     fill('people', h);
     fill('brain', !td.brain ? '<div class="muted">No second brain is set in config.json.</div>'
-      : td.brain.found === false ? missingFolder(td.brain.path, 'second_brain')
+      : td.brain.found === false ? missingFolder(td.brain.path, 'second_brain', td.brain.refused)
         : `<div class="kv"><span class="muted">Notes moved (3 days)</span><b>${td.brain.moved.length}</b><span class="muted">Left unfinished</span><b>${td.brain.open.length}</b><span class="muted">Daily note today</span><b>${td.brain.daily ? 'yes' : 'no'}</b></div>`);
   }));
   jobs.push(safe('/api/inbox').then(ib => {

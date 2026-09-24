@@ -6,6 +6,7 @@ checked to be inside the vault it names, so a crafted address such as
 `../../secret.txt` is refused rather than served.
 """
 
+import os
 import re
 import sys
 from datetime import datetime, timedelta
@@ -19,6 +20,26 @@ MAX_FILES = 4000
 MAX_BYTES = 400_000
 
 
+def refused(root):
+    """macOS's refusal of a folder, in words, or "" (Mac only).
+
+    A program that starts by itself on a Mac (Jeeves' start-up file) may be refused the
+    Documents folder with "Operation not permitted". Python then reads the folder as not
+    there, so the page said the vault was missing when it was where it should be."""
+    if sys.platform != "darwin":
+        return ""
+    try:
+        os.listdir(root)
+    except PermissionError:
+        return ("macOS refused access to %s. Jeeves cannot read it, so nothing below is a real "
+                "answer. A program that starts by itself may be refused the Documents folder: move "
+                "the folder out of Documents, for example to %s, and put its new place in "
+                "config.json." % (root, Path.home() / "Second Brain"))
+    except OSError:
+        return ""
+    return ""
+
+
 def _vault_map(cfg):
     return {k: (label, p) for k, label, p in C.vaults(cfg)}
 
@@ -26,7 +47,9 @@ def _vault_map(cfg):
 def listing(cfg):
     out = []
     for key, label, p in C.vaults(cfg):
-        out.append({"key": key, "label": label, "path": str(p), "exists": p.is_dir()})
+        no = refused(p)
+        out.append({"key": key, "label": label, "path": str(p), "exists": False if no else p.is_dir(),
+                    "refused": no})
     return out
 
 
@@ -47,8 +70,9 @@ def tree(cfg, key):
     if key not in vm:
         return {"error": "unknown vault"}
     label, root = vm[key]
-    if not root.is_dir():
-        return {"key": key, "label": label, "exists": False, "files": []}
+    no = refused(root)
+    if no or not root.is_dir():
+        return {"key": key, "label": label, "exists": False, "files": [], "refused": no}
     files = []
     for p, rel in _md_files(root):
         try:
@@ -202,7 +226,10 @@ def today(cfg, now=None):
     if "crm" in vm:
         root = vm["crm"][1]
         page = root / "Today.md"
-        if page.is_file():
+        no = refused(root)
+        if no:
+            out["crm"] = {"found": False, "exists": False, "vault": str(root), "refused": no, "hint": no}
+        elif page.is_file():
             out["crm"] = {"found": True, "exists": True, "vault": str(root), "path": "Today.md",
                           "text": page.read_text(encoding="utf-8", errors="replace")[:MAX_BYTES],
                           "built": datetime.fromtimestamp(page.stat().st_mtime).strftime("%a %d %b %H:%M")}
@@ -217,8 +244,10 @@ def today(cfg, now=None):
 
     if "brain" in vm:
         root = vm["brain"][1]
-        b = {"found": root.is_dir(), "path": str(root), "daily": None, "moved": [], "open": []}
-        if root.is_dir():
+        no = refused(root)
+        b = {"found": False if no else root.is_dir(), "path": str(root), "daily": None, "moved": [],
+             "open": [], "refused": no}
+        if b["found"]:
             dn = _daily_note(cfg, root, now)
             if dn:
                 b["daily"] = {"path": dn.relative_to(root).as_posix(),
