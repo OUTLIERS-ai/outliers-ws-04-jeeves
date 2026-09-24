@@ -500,11 +500,13 @@ def main(argv=None):
     cfg.setdefault("permission_mode", "dontAsk")
     cfg.setdefault("allow_actions", False)
     cfg.setdefault("claude_command", "claude")
+    # A Mac member is sent to the Mac copy of each repo (its name ends in -mac).
+    app_repo = "https://github.com/OUTLIERS-ai/%s" + ("-mac" if sys.platform == "darwin" else "")
     cfg.setdefault("apps", {
         "projectforge": {"url": "http://127.0.0.1:3020",
-                         "repo": "https://github.com/OUTLIERS-ai/outliers-ws-03-projectforge"},
+                         "repo": app_repo % "outliers-ws-03-projectforge"},
         "fleetview": {"url": "http://127.0.0.1:3010",
-                      "repo": "https://github.com/OUTLIERS-ai/outliers-ws-02-fleetview"}})
+                      "repo": app_repo % "outliers-ws-02-fleetview"}})
     say("")
     if cfg == old:
         say("config.json already says exactly this. Nothing changed.")

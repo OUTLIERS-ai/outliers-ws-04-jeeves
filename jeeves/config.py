@@ -15,6 +15,10 @@ from pathlib import Path
 # printed "python start.py" fails there with "command not found".
 PY = "python3" if sys.platform == "darwin" else "python"
 
+# Where the Work board and FleetView are downloaded from. A Mac member gets the Mac
+# copy of each (its name ends in -mac); the Windows repos print Windows commands.
+APP_REPO = "https://github.com/OUTLIERS-ai/%s" + ("-mac" if sys.platform == "darwin" else "")
+
 ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULTS = {
@@ -37,10 +41,8 @@ DEFAULTS = {
     "inbox_file": "",
     "daily_note_folders": ["Daily", "Daily Notes", "Journal", "Diary", "Calendar"],
     "apps": {
-        "projectforge": {"url": "http://127.0.0.1:3020",
-                         "repo": "https://github.com/OUTLIERS-ai/outliers-ws-03-projectforge"},
-        "fleetview": {"url": "http://127.0.0.1:3010",
-                      "repo": "https://github.com/OUTLIERS-ai/outliers-ws-02-fleetview"},
+        "projectforge": {"url": "http://127.0.0.1:3020", "repo": APP_REPO % "outliers-ws-03-projectforge"},
+        "fleetview": {"url": "http://127.0.0.1:3010", "repo": APP_REPO % "outliers-ws-02-fleetview"},
     },
     "ccusage": "auto",
     "orb": {"inner": "At your service", "outer": "Your second brain is listening"},
