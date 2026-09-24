@@ -31,6 +31,7 @@ import json
 import mimetypes
 import os
 import socket
+import socketserver
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -210,7 +211,15 @@ class JeevesServer(ThreadingHTTPServer):
     def server_bind(self):
         if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        super().server_bind()
+        # http.server's own server_bind also asks for this address's name
+        # (socket.getfqdn), only to fill in server_name, which nothing here uses.
+        # On GitHub's test Macs that look-up took 35 seconds on every start
+        # (measured 2026-09-24), so the page answered 35 seconds late and the
+        # checks that wait 15 or 20 seconds for it failed. The name is now the
+        # address as given, with no look-up.
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name, self.server_port = str(host), port
 
 
 def make_server(port=None, config_file=None, verbose=False):
