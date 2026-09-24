@@ -14,7 +14,12 @@ writes "Start Jeeves (hidden).vbs" here, and when an answer changes it keeps
 the old settings as config.json.bak-<date>. Running it again with the same
 answers changes nothing.
 
-    python install.py --uninstall     removes the logon launcher, if it made one
+    python install.py --copy ../jeeves-trial
+        makes a second copy to experiment on, with its own port, while this one runs
+
+    python install.py --uninstall
+        stops Jeeves, and removes the file that starts it by itself when the computer
+        starts, if this folder made one
 
 Nothing here runs on a timer. Nothing starts Claude unless you type a message.
 
@@ -24,6 +29,7 @@ Needs: Python 3.11 or newer and Claude Code. Nothing to pip install.
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -156,20 +162,23 @@ def pythonw():
     return str(pw if pw.exists() else sys.executable)
 
 
-def vbs_text():
+def vbs_text(folder=None, config=None):
+    """The Windows start file for the Jeeves in `folder` (this one unless a copy is made)."""
+    folder = Path(folder or HERE)
+    config = Path(config or (CONFIG if folder == HERE else folder / "config.json"))
     # Run ..., 0, False : 0 = no window at all, False = do not wait for it.
-    cmd = '"%s" "%s" --no-open' % (pythonw(), HERE / "start.py")
-    if CONFIG != HERE / "config.json":
-        cmd += ' --config "%s"' % CONFIG
+    cmd = '"%s" "%s" --no-open' % (pythonw(), folder / "start.py")
+    if config != folder / "config.json":
+        cmd += ' --config "%s"' % config
     return ('\' Starts Jeeves with no window. Made by install.py; remove with\n'
             '\' python install.py --uninstall\n'
             'Set sh = CreateObject("WScript.Shell")\n'
             'sh.CurrentDirectory = "%s"\n'
-            'sh.Run "%s", 0, False\n') % (HERE, cmd.replace('"', '""'))
+            'sh.Run "%s", 0, False\n') % (folder, cmd.replace('"', '""'))
 
 
 def mac_path():
-    """A logon job on a Mac starts with almost no PATH, so Claude Code would not be found.
+    """A job the Mac starts by itself when the computer starts has almost no PATH, so Claude Code would not be found.
     Give it the folders Claude Code's installers use, then the usual system ones."""
     h = str(home())
     return ":".join([h + "/.local/bin", h + "/.claude/local", "/opt/homebrew/bin",
@@ -191,33 +200,76 @@ def plist_text():
 """ % (sys.executable, HERE / "start.py", HERE, mac_path())
 
 
+def launcher_files():
+    d = startup_dir()
+    return ([d / LAUNCHER_NAME] if d else []) + [home() / "Library" / "LaunchAgents" / PLIST_NAME]
+
+
+def started_folder(text):
+    """The folder whose start.py a start file runs, or None if it cannot be read."""
+    m = re.search(r'([A-Za-z]:[^"<>\r\n]*?|/[^"<>\r\n]*?)[\\/]start\.py', text)
+    return Path(m.group(1)) if m else None
+
+
+def belongs_here(path):
+    """A start file is this folder's to replace or remove when it starts this folder's
+    Jeeves, or a folder that is gone (moved or deleted). One that starts another Jeeves
+    that is still there, such as the everyday one when this is a copy, is left alone.
+    A file that cannot be read is left alone too."""
+    try:
+        folder = started_folder(Path(path).read_text(encoding="utf-8"))
+    except OSError:
+        return False
+    if folder is None:
+        return False
+    try:
+        same = folder.resolve() == HERE
+    except OSError:
+        same = False
+    return same or not (folder / "start.py").exists()
+
+
+def not_ours(target):
+    return ("Another Jeeves folder already starts by itself when the computer starts (%s)."
+            % target + "\n  Left as it is. To move it to this folder, run  python install.py"
+            " --uninstall  in that folder first.")
+
+
 def install_launcher():
     if os.name == "nt":
         d = startup_dir()
         if d is None:
-            return "Could not find your Startup folder, so no launcher was made."
+            return "Could not find your Startup folder, so nothing was made to start Jeeves."
         target = d / LAUNCHER_NAME
         text = vbs_text()
         if target.exists() and target.read_text(encoding="utf-8") == text:
-            return "The logon launcher is already in place: %s" % target
+            return ("The file that starts Jeeves when the computer starts is already in place: %s"
+                    % target)
+        if target.exists() and not belongs_here(target):
+            return not_ours(target)
         atomic_write(target, text)
-        return "Jeeves will start hidden when you log in: %s" % target
+        return "Jeeves will start by itself, with no window, when the computer starts: %s" % target
     if sys.platform == "darwin":
         target = home() / "Library" / "LaunchAgents" / PLIST_NAME
+        if target.exists() and not belongs_here(target):
+            return not_ours(target)
         atomic_write(target, plist_text())
         return ("Wrote %s. To switch it on now run:\n     launchctl load %s" % (target, target))
-    return ("On Linux, add this line to 'crontab -e' to start Jeeves at boot:\n"
+    return ("On Linux, add this line to 'crontab -e' to start Jeeves when the computer starts:\n"
             "     @reboot cd %s && %s start.py --no-open" % (HERE, sys.executable))
 
 
 def remove_launcher():
-    done = []
-    d = startup_dir()
-    for p in ([d / LAUNCHER_NAME] if d else []) + [home() / "Library" / "LaunchAgents" / PLIST_NAME]:
-        if p.exists():
+    done, kept = [], []
+    for p in launcher_files():
+        if not p.exists():
+            continue
+        if belongs_here(p):
             p.unlink()
             done.append(str(p))
-    return done
+        else:
+            kept.append(str(p))
+    return done, kept
 
 
 def hidden_start_file():
@@ -235,20 +287,75 @@ def hidden_start_file():
 # ------------------------------------------------------------------ main
 
 def uninstall():
-    say("", "Removing the logon launcher (your config.json and vaults are not touched).", "")
+    say("", "Stopping Jeeves and removing the file that starts it when the computer starts",
+        "(your config.json and vaults are not touched).", "")
     try:
         sys.path.insert(0, str(HERE))
         from start import stop
         stop()
     except Exception:  # noqa: BLE001
         pass
-    gone = remove_launcher()
-    if gone:
-        for g in gone:
-            say("removed  %s" % g)
-    else:
-        say("There was no launcher to remove.")
+    gone, kept = remove_launcher()
+    for g in gone:
+        say("removed  %s" % g)
+    for k in kept:
+        say("left in place  %s  (it starts Jeeves from another folder)" % k)
+    if not gone and not kept:
+        say("Nothing was set to start Jeeves when the computer starts.")
     say("", "To remove Jeeves completely, delete this folder: %s" % HERE, "")
+    return 0
+
+
+COPY_LEAVES = {"state", "__pycache__", ".pytest_cache", "Start Jeeves (hidden).vbs", "config.json"}
+
+
+def copy_to(dest, port=None):
+    """A second Jeeves to experiment on while this one keeps running.
+
+    Copies this folder to `dest` with the same folders and settings but a port of its own.
+    It leaves behind what belongs to the running Jeeves: state/ (its saved conversation
+    and the record of which program is running, which `--stop` reads), the old-settings
+    backups and the Windows double-click start file, which is made afresh for the copy.
+    It never touches the file that starts Jeeves when the computer starts.
+    """
+    dest = Path(os.path.expanduser(dest)).resolve()
+    old = {}
+    if CONFIG.exists():
+        try:
+            old = json.loads(CONFIG.read_text(encoding="utf-8"))
+        except ValueError:
+            old = {}
+    if not old.get("second_brain"):
+        say("Install this Jeeves first (python install.py), then make the copy.",
+            "Nothing has been changed.", "")
+        return 1
+    if dest == HERE or HERE in dest.parents:
+        say("The copy has to go outside this folder, for example ../jeeves-trial .",
+            "Nothing has been changed.", "")
+        return 1
+    if dest.exists() and any(dest.iterdir()):
+        say("%s already has files in it. Pick a new folder name." % dest,
+            "Nothing has been changed.", "")
+        return 1
+    ours = int(old.get("port") or DEFAULT_PORT)
+    port = port or port_to_offer(ours + 1)
+
+    def leave(folder, names):
+        return [n for n in names if n in COPY_LEAVES or n.startswith("config.json.bak-")
+                or n.endswith(".tmp")]
+
+    shutil.copytree(HERE, dest, ignore=leave, dirs_exist_ok=True)
+    cfg = dict(old, port=port)
+    atomic_write(dest / "config.json", json.dumps(cfg, indent=2) + "\n")
+    say("Made a copy of Jeeves to experiment on: %s" % dest,
+        "It reads the same note folders as this one, on port %d instead of %d." % (port, ours),
+        "It starts a new conversation. Your everyday Jeeves is not touched, and neither is",
+        "the file that starts it when the computer starts.")
+    if os.name == "nt":
+        atomic_write(dest / "Start Jeeves (hidden).vbs", vbs_text(dest, dest / "config.json"))
+        say("Its own Start Jeeves (hidden).vbs starts the copy, not this one.")
+    say("", "Start the copy:", "", "    cd %s" % dest, "    python start.py", "",
+        "It opens http://127.0.0.1:%d/ . Ctrl+C in that terminal stops it." % port, "")
     return 0
 
 
@@ -258,21 +365,28 @@ def main(argv=None):
     ap.add_argument("--crm", help="your CRM folder (optional)")
     ap.add_argument("--agents", help="a folder of Claude Code agents")
     ap.add_argument("--port", type=int)
-    ap.add_argument("--launcher", action="store_true", help="start hidden at logon")
+    ap.add_argument("--launcher", action="store_true",
+                    help="start by itself, with no window, when the computer starts")
     ap.add_argument("--yes", action="store_true", help="accept every default, ask nothing")
-    ap.add_argument("--uninstall", action="store_true")
+    ap.add_argument("--uninstall", action="store_true",
+                    help="stop Jeeves and remove the file that starts it when the computer starts")
+    ap.add_argument("--copy", metavar="FOLDER",
+                    help="make a second copy to experiment on, with its own port")
     ap.add_argument("--skip-claude-check", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args(argv)
 
     say("", "=" * 66, "  OUTLIERS WORKSPACE - PIECE 4 - JEEVES", "=" * 66, "")
     if a.uninstall:
         return uninstall()
+    if a.copy:
+        return copy_to(a.copy, a.port)
 
     # 1. What it needs. If anything is missing, stop and change nothing.
     if too_old(sys.version_info):
         say("Jeeves needs Python %d.%d or newer. This is %s."
             % (MIN_PY[0], MIN_PY[1], sys.version.split()[0]),
-            "Python 3.10 and older no longer get security fixes.",
+            "Python 3.9 and older no longer get security fixes, and 3.10 gets them only",
+            "until 2026-10-31 (python.org, checked 2026-09-24).",
             "Install a newer Python from https://www.python.org/downloads/ and run this again.",
             "Nothing has been changed.", "")
         return 1
@@ -391,17 +505,20 @@ def main(argv=None):
              "%s is already in place (double-click it to start Jeeves with no window).")
             % hs[0].name)
 
-    # 5. Start at logon? Off unless you say yes.
-    if a.launcher or yes("Start Jeeves hidden every time you log in?", False, a):
+    # 5. Start by itself when the computer starts? Off unless you say yes.
+    if a.launcher or yes("Start Jeeves by itself, with no window, each time you switch on "
+                         "this computer and sign in?", False, a):
         say(install_launcher())
     else:
-        say("Not starting at logon. Start it yourself with:  python start.py")
+        say("Jeeves will not start by itself when the computer starts. "
+            "Start it yourself with:  python start.py")
 
     say("", "-" * 66,
         "Done. Start it now:", "",
         "    python start.py", "",
         "Your browser opens http://127.0.0.1:%d/ . You should see the orb top left," % port,
-        "Chat on the left, Today in the middle and your agents in a tab below it.",
+        "Chat on the left, Today in the middle and Across everything on the right.",
+        "On a laptop: Chat on the left and a stack of tabs on the right.",
         "Leave the terminal open while you use it; Ctrl+C in it stops Jeeves.",
         "Chat is given 3 tools and no others: open a file, search inside files, find",
         "files by name. Commands, file changes and the internet are switched off until",

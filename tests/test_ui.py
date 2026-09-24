@@ -2,14 +2,22 @@
 """The cockpit in a real (headless, invisible) browser, on made-up data.
 
 Skipped when the Python `playwright` package or its Chromium is not installed:
-members do not need it to use Jeeves, only to run these checks.
+members do not need it to use Jeeves, only to run these checks. Each of the 9 is
+reported as skipped on its own, so `python -m pytest -q` says "9 skipped" whether
+Playwright is missing altogether or only its Chromium is.
 These guard the usability faults found on 2026-09-22 so they cannot come back.
 """
 import time
 
 import pytest
 
-pw = pytest.importorskip("playwright.sync_api")
+try:
+    import playwright.sync_api as pw
+except ImportError:
+    pw = None
+    pytestmark = pytest.mark.skip(
+        reason="checks the page in a real browser: needs Playwright "
+               "(pip install playwright, then python -m playwright install chromium)")
 
 
 @pytest.fixture

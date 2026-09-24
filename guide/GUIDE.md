@@ -11,6 +11,8 @@ Jeeves is 1 page in your web browser, served by a small program on your own comp
 
 This is piece 4 of 4 in the agent workspace. Install them in order: 1 agent-flow, 2 FleetView, 3 ProjectForge, 4 Jeeves. Each one also works on its own; Jeeves shows ProjectForge and FleetView inside 2 of its panels when they are running.
 
+**There is no voice in this download.** The Jeeves Ashley showed you live spoke its answers out loud. This one does not: it has no voice and no microphone, and every answer arrives as text. Ashley's first voice was a copy of a real narrator's voice, which carries legal and reputational risk, so it was left out. To add a voice yourself, idea 6 under "Fit it to your own AI system" is a prompt that uses the speaking voices already built into your web browser: no copied voice, and no extra program.
+
 ### Words used in this guide
 
 | Word | What it means here |
@@ -145,7 +147,7 @@ Before this download went out, 3 people checked it: a stranger followed this gui
 
 ### 2026-09-23: a second round of testing, the day before it went out
 
-The 3 checks were run again on the finished download, and an automatic check ran every action in Jeeves (send a message, stop an answer, open each panel) 5 times over. 10 more faults were found and fixed. These are the ones you would have met:
+The 3 checks were run again on the finished download, and an automatic check ran every action in Jeeves (send a message, stop an answer, open each panel) 5 times over. 10 more faults were found and fixed. Here are all 10:
 
 - **Naming the tools to switch off left 25 other tools still switched on.** Counted on 2026-09-22 against Claude Code 2.1.280. The block list named 7; Claude Code has added many since the list was written, among them tools that book a job for later, raise a notification, start a second Claude running in the background and message another agent. Chat is now given a list of what it MAY use, and nothing else: open a file, search inside files, find files by name. Proved against the real Claude Code, not only in a test: see "What Chat can and cannot do".
 - **The model was named by a word that moved.** `opus` meant Claude Opus 5.5 from 2026-09-22, and the price table in FleetView (piece 2) had never heard of it, so your tokens would have shown as "price unknown". Every model is now written out in full.
@@ -184,9 +186,11 @@ The 3 checks were run again on the finished download, and an automatic check ran
 
 ## Before you start
 
+**On a Mac:** a current Mac has a command called `python3` and none called `python`. Wherever this guide says `python`, type `python3`, and where it says `python -m pip`, type `python3 -m pip`. Paths in this guide are written the Windows way; on a Mac, `C:\Users\<you>` is your home folder, `~`, so `C:\Users\<you>\Documents\Second Brain` is `~/Documents/Second Brain`.
+
 | You need | How to check |
 |---|---|
-| Python 3.11 or newer | In a terminal: `python --version` (on a Mac: `python3 --version`). The installer refuses anything older: Python 3.10 and everything before it has stopped getting security fixes. |
+| Python 3.11 or newer | In a terminal: `python --version` (on a Mac: `python3 --version`). The installer refuses anything older. Python 3.9 and everything before it no longer get security fixes, and 3.10 gets them only until 2026-10-31 (python.org, checked 2026-09-24). |
 | Claude Code, logged in | `claude --version` prints a number (2.1.280 on 2026-09-23), and typing `claude` opens it without asking you to log in |
 | Git | `git --version` |
 | Your second brain | The folder from the second-brain sessions. Its path, for example `C:\Users\<you>\Documents\Second Brain` |
@@ -219,10 +223,10 @@ python install.py
    - where your CRM is (the same, from the CRM installer; leave it blank if you have none)
    - where your agents are (normally the `agents` folder inside `.claude` in your user folder, for example `C:\Users\<you>\.claude\agents`)
    - which port to use: the number after the colon in the address, 4040 unless another program is using it. Type a number; anything else and it asks again.
-6. It asks whether to start Jeeves hidden every time you log in. The default is no. If you say yes on Windows, it puts a small file called `Jeeves.vbs` (a small Windows script file) in your Startup folder that starts Jeeves with no window. On a Mac it writes a start-up settings file for the Mac's own launcher and prints the 1 command that switches it on. On Linux it prints a line to paste into your list of scheduled jobs, which you open by typing `crontab -e`.
+6. It asks whether Jeeves should start by itself, with no window, each time you switch on your computer and sign in to Windows (on a Mac: and log in to your Mac). Jeeves has no account of its own to log in to. The default is no. If you say yes on Windows, it puts a small file called `Jeeves.vbs` (a small Windows script file) in your Startup folder (the Windows folder of programs that start when you sign in) that starts Jeeves with no window. On a Mac it writes a start-up settings file for the Mac's own launcher and prints the 1 command that switches it on. On Linux it prints a line to paste into your list of scheduled jobs, which you open by typing `crontab -e`.
 7. It writes `config.json` next to `install.py`. On Windows it also writes `Start Jeeves (hidden).vbs` in the same folder, and if you change an answer it keeps your old settings as `config.json.bak-<date>`. When Jeeves runs it keeps its own working files (which conversation it is carrying on, which copy is running) in a folder called `state` here. Run the installer again with the same answers and it says "Nothing changed".
 
-![The installer, pressing Enter at each question. The folders are made up; yours will be your own. On the computer these pictures were taken 4040 was already in use, so the installer says so and offers 4041; on yours that line will usually not appear. The playwright line only matters if you want to retake this guide's pictures](img/terminal-install.png)
+![The installer, pressing Enter at each question. The folders are made up; yours will be your own. If another program is already using 4040, the installer says so and offers the next free number instead. The playwright line only matters if you want to retake this guide's pictures](img/terminal-install.png)
 
 ![Running the installer again with the same answers changes nothing](img/terminal-install-again.png)
 
@@ -241,7 +245,7 @@ When it worked you see the orb top left, Chat on the left, Today in the middle a
 
 > **Tip:** On Windows, double-click `Start Jeeves (hidden).vbs` to start Jeeves with no window. It does not open your browser: go to http://127.0.0.1:4040/ yourself, and bookmark it. Stop it with `python start.py --stop`.
 
-> **Tip:** Changed your mind about starting when you log in? `python install.py --uninstall` stops Jeeves and removes the Startup file (or the Mac start-up file). It leaves your settings and vaults alone. To remove Jeeves completely, then delete the `outliers-ws-04-jeeves` folder.
+> **Tip:** Changed your mind about Jeeves starting by itself when the computer starts? `python install.py --uninstall` stops Jeeves and removes the Startup file (or the Mac start-up file). It leaves your settings and vaults alone. To remove Jeeves completely, then delete the `outliers-ws-04-jeeves` folder as well.
 
 > **Warning:** Do not change the setting `"permission_mode"` (Claude Code's own rule for when it must ask you first) to `"bypassPermissions"` in config.json. Set to `"bypassPermissions"`, Claude never stops to ask. Switch `"allow_actions"` on as well and it can rewrite or delete any note in your vaults, and run any command on your computer, with nobody there to say no, from a browser tab that sits open all day.
 
@@ -329,15 +333,32 @@ The Tokens panel's 4 kinds: **Conversation re-read** (cache read) is Claude re-r
 
 ![Today, made to fill the page by double-clicking its tab. Esc puts it back](img/maximised.png)
 
-**Stopping it.** Press Ctrl+C in the terminal where you typed `python start.py`. If you started it another way (the hidden file, or when you logged in), type `python start.py --stop` in the `outliers-ws-04-jeeves` folder. It checks that the program on that port really is Jeeves before stopping it, so it never stops anything else.
+**Stopping it.** Press Ctrl+C in the terminal where you typed `python start.py`. If you started it another way (by double-clicking `Start Jeeves (hidden).vbs`, or it started by itself when the computer started), open a terminal (it opens in your home folder), type `cd outliers-ws-04-jeeves`, then `python start.py --stop`. It checks that the program on that port really is Jeeves before stopping it, so it never stops anything else.
 
 ![Starting Jeeves when it is already running. The number is the ID Windows gives the running Jeeves; you do not need it](img/terminal-already-running.png)
 
 ## Fit it to your own AI system
 
-This download is where you start. Change it until it matches how you work. Ashley's own Jeeves went a long way past what you have here. It had 8 colour themes, including a light theme for daytime. It had real PowerShell terminals running inside the page, so he could watch a build without leaving it. It had a command menu opened from the keyboard, panels popped out across 3 monitors, and a phone version he installed on his Samsung and reached over a private network of his own. When a redesign came back calmer and simpler, with 1 orb and 4 cards, he rejected it in 1 line: "Jeeves is a FULL UI - that's the point." He did not accept somebody else's idea of what his own screen was for.
+**The safe way.** Make a second copy of Jeeves and change that, so the Jeeves you use every day keeps working while you experiment. Open a new terminal (it opens in your home folder) and type these 4 lines:
 
-Each of these is a change you can ask your own Claude Code to make. Open a terminal in the `outliers-ws-04-jeeves` folder, type `claude`, and paste the prompt. Afterwards, run the 70 automatic checks that come with Jeeves (`python -m pytest -q`; pytest is a Python checking program, installed with `pip install pytest` if missing) and restart Jeeves.
+```
+cd outliers-ws-04-jeeves
+python install.py --copy ../jeeves-trial
+cd ../jeeves-trial
+python start.py
+```
+
+The second line makes a folder called `jeeves-trial` next to `outliers-ws-04-jeeves`, with your settings and a port of its own: 1 above your everyday Jeeves's port (4041 if yours is 4040), or the next number nothing else is using. It prints the copy's address, for example http://127.0.0.1:4041/, and your everyday Jeeves stays at http://127.0.0.1:4040/. The copy reads the same 2 note folders as your everyday Jeeves, starts a fresh chat conversation, and leaves alone the file that starts your everyday Jeeves when the computer starts. On Windows, the copy's own `Start Jeeves (hidden).vbs` starts the copy. Do not copy the folder by hand instead: a copy made by hand keeps 4040 and the everyday Jeeves's record of which program is running, so it will not start while your everyday Jeeves runs, and `python start.py --stop` typed in it stops your everyday Jeeves.
+
+Before your first change, check the copy. Install pytest (a Python checking program) once, with `python -m pip install pytest`. Then, in the `jeeves-trial` folder, type `python -m pytest -q`. On Windows it says `68 passed, 9 skipped`; on a Mac, `64 passed, 13 skipped`, because 4 more checks look at files only Windows uses. The 9 skipped checks open the page in a real web browser and need Playwright, a free add-on this guide does not ask you to install. Skipped is fine: it does not mean anything is broken. (With Playwright and its Chromium browser installed, Windows says `77 passed`.) Run the same line after every change. If it says `failed` anywhere, the change broke something: put it back before you go on.
+
+Read "Every command and setting" near the end of this guide before you ask Claude Code for a change, because much of what you want is already a setting in `config.json`.
+
+2 settings can cost you notes. The most dangerous change in this guide is `"bypassPermissions"` for `"permission_mode"` in `config.json`: Claude would run any command with nobody asked, as the warning in "Install it" explains. Never use it. Idea 5 below sets `"permission_mode"` to `"acceptEdits"`, which lets Claude change notes without asking you, which is why idea 5 also adds a rule to your `CLAUDE.md` saying which folders Claude may write in.
+
+Ashley's own Jeeves went a long way past what you have here. It had 8 colour themes, including a light theme for daytime. It had real PowerShell terminals running inside the page, so he could watch a build without leaving it. It had a command menu opened from the keyboard, panels popped out across 3 monitors, and a phone version he installed on his Samsung and reached over a private network of his own. When a redesign came back calmer and simpler, with 1 orb and 4 cards, he rejected it in 1 line: "Jeeves is a FULL UI - that's the point."
+
+Each of these is a change you can ask your own Claude Code to make. Open a terminal (it opens in your home folder), type `cd jeeves-trial`, then `claude`, and paste the prompt. Afterwards, in the same folder, run the automatic checks with `python -m pytest -q` (the counts are in "The safe way" above; a change that adds a check adds 1 to passed, and any `failed` means put the change back). Then restart the copy: Ctrl+C in the terminal where it runs, then `python start.py`.
 
 The prompts use programmer words so Claude knows exactly which files to change. You do not need to understand them.
 
@@ -431,20 +452,21 @@ changed.
 
 | Command | What it does |
 |---|---|
-| `python install.py` | Asks 4 questions and writes `config.json`. Safe to run again. |
+| `python install.py` | Asks 4 questions about folders and the port, and 1 about starting by itself, then writes `config.json`. Safe to run again. |
 | `python install.py --port 4041` | The same, with a different port. |
 | `python install.py --vault <folder> --crm <folder> --agents <folder>` | Gives the answers up front instead of asking. |
-| `python install.py --launcher` | Also starts Jeeves hidden every time you log in. |
+| `python install.py --launcher` | Also makes Jeeves start by itself, with no window, when the computer starts. |
+| `python install.py --copy ../jeeves-trial` | Makes a second copy to experiment on, next to this folder, with its own port. See "The safe way". |
 | `python install.py --yes` | Accepts every answer it found, asks nothing. |
-| `python install.py --uninstall` | Stops Jeeves and removes the file that starts it when you log in. Leaves settings and vaults alone. |
+| `python install.py --uninstall` | Stops Jeeves and removes the file that starts it by itself when the computer starts. Leaves settings and vaults alone. In a copy, it leaves the everyday Jeeves's file alone. |
 | `python start.py` | Starts Jeeves and opens your browser. Ctrl+C stops it. |
-| `python start.py --no-open` | Starts without opening a browser (the file that starts Jeeves when you log in uses this). |
+| `python start.py --no-open` | Starts without opening a browser (the file that starts Jeeves by itself when the computer starts uses this). |
 | `python start.py --port 4041` | Starts on another port this time only. |
 | `python start.py --config <file>` | Uses another settings file (the practice version, `tools/demo.py`, uses this). |
 | `python start.py --stop` | Stops a Jeeves that is running, however it was started. |
 | `python tools/demo.py ../jeeves-demo --serve --port 4099` | A made-up practice world to try first. 0 tokens. |
-| `python -m pytest -q` | Runs the 70 automatic checks, on made-up data. They never touch your real files. |
-| `python tools/shoot.py <empty folder> guide/img` | Retakes every picture in this guide (needs Playwright, a free add-on that drives a web browser: `pip install playwright`). |
+| `python -m pytest -q` | Runs the automatic checks, on made-up data: `68 passed, 9 skipped` on Windows. The 9 need Playwright. They never touch your real files. Needs pytest once: `python -m pip install pytest`. |
+| `python tools/shoot.py <empty folder> guide/img` | Retakes every picture in this guide (needs Playwright, a free add-on that drives a web browser: `python -m pip install playwright`, then `python -m playwright install chromium`). |
 
 ### Settings in config.json
 
@@ -477,7 +499,7 @@ changed.
 | `config.json` | Every install that changes an answer. |
 | `config.json.bak-<date>` | Your old settings, when an answer changed. |
 | `Start Jeeves (hidden).vbs` | Every install on Windows. Double-click to start with no window. |
-| `Jeeves.vbs` in your Startup folder, or `ai.outliers.jeeves.plist` in `Library/LaunchAgents` on a Mac | Only if you said yes to starting when you log in. |
+| `Jeeves.vbs` in your Startup folder, or `ai.outliers.jeeves.plist` in `Library/LaunchAgents` on a Mac | Only if you said yes to Jeeves starting by itself when the computer starts. |
 | `state/chat-sessions.json` | The reference number Claude Code gives a conversation, so Chat can carry the same one on after you restart. |
 | `state/jeeves.pid` | The process number (the ID Windows gives the running Jeeves program) and its port, so `--stop` finds it. |
 | `state/read-only-settings.json` | The 7 tools that act (run commands, change files, reach the internet), written down as refused. Chat's own 3-tool limit is given on the command line; this file is what a second Claude that Chat starts to help with your question has to obey too. |
@@ -489,7 +511,7 @@ changed.
 | What you see | Why | What to do |
 |---|---|---|
 | Jeeves still answers after `python start.py --stop` | An older copy (before 2026-09-22) let 2 copies share a port on Windows. This copy refuses a second one. | In Task Manager, open the Details tab, right-click the column headers, add "Command line", then end every `python.exe` or `pythonw.exe` whose command line ends in `start.py`. Then start Jeeves once. |
-| "Jeeves is already running" when you start it | It is: perhaps the hidden file started it, or it started when you logged in. | Open http://127.0.0.1:4040/ . To restart it: `python start.py --stop`, then `python start.py`. |
+| "Jeeves is already running" when you start it | It is: perhaps the hidden file started it, or it started by itself when the computer started. | Open http://127.0.0.1:4040/ . To restart it: `python start.py --stop`, then `python start.py`. |
 | "Claude Code is not logged in", or "No conversation found" | Claude Code needs a login, or the conversation Jeeves was carrying on has been deleted from Claude Code's logs. | Type `claude` in a terminal and log in. Then press **Try again** under the message. |
 | Chat says Claude Code was not found | Your computer cannot find the `claude` program (it is not on your PATH, the list of folders Windows searches for programs), or Jeeves was started from a window that was open before you installed it. | Close every terminal, open a new one, check `claude --version`, then restart Jeeves. If it still cannot find it, put the full path in `config.json` as `"claude_command"`. |
 | Chat says it cannot run a command, edit a file or look online | By design: Chat is read-only unless you allow more. | See "5. Let it edit notes, on your terms" above. |

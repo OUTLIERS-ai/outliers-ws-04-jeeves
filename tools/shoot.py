@@ -2,6 +2,8 @@
 """Take every picture in the guide, headless (no window ever appears), on made-up data.
 
     python tools/shoot.py <empty work folder> guide/img
+    python tools/shoot.py <empty work folder> guide/img diagram-files.png,terminal-install.png
+        (retakes only the pictures named; the rest go to the work folder, not guide/img)
 
 It builds its own made-up world in <work folder> ("Sam the bookkeeper", from
 tools/demo.py), starts Jeeves on it inside this program, and photographs it.
@@ -166,7 +168,7 @@ def terminal(title, blocks):
             % (html.escape(title), "\n".join(parts)))
 
 
-def main(work, out):
+def main(work, out, only=None):
     from playwright.sync_api import sync_playwright
     from jeeves import sessions
     from jeeves.server import serve_in_thread
@@ -202,6 +204,8 @@ def main(work, out):
     shots = []
 
     def save(name):
+        if only and name not in only:
+            return str(tmp / name)
         shots.append(name)
         return str(out / name)
 
@@ -509,7 +513,7 @@ DIAGRAM_TIMELINE = """<div class='wrap'><h1>How the original was built (June to 
         ("2026-07-08", "#e0a84a", "Paused: its timers kept starting Claude and using tokens."),
         ("2026-07-09", "#e0a84a", "Would not start: it needed a folder outside its own."),
         ("2026-09-22", "#3ecf8e", "This rebuild: no timers, nothing outside its folder, and a Chat that can only read your notes."),
-        ("2026-09-23", "#3ecf8e", "Checked again: Chat given 3 reading tools and no others, models named in full, and every panel names a folder that is not there."),
+        ("2026-09-23", "#3ecf8e", "Checked again: Chat given 3 reading tools and no others, models named in full, and a panel that cannot find a folder now names it."),
     ])
 
 DIAGRAM_COST = """<div class='wrap'><h1>What costs tokens, and what does not</h1>
@@ -528,13 +532,13 @@ DIAGRAM_COST = """<div class='wrap'><h1>What costs tokens, and what does not</h1
 <li>Nothing else. There is no timer that starts Claude.</li></ul></div></div></div>"""
 
 DIAGRAM_FILES = """<div class='wrap'><h1>What is in the folder, and what Jeeves writes</h1>
-<p class='sub'>Everything Jeeves writes stays inside its own folder. It never writes to your vaults.</p>
+<p class='sub'>Everything Jeeves writes stays inside its own folder, except the start-by-itself file if you said yes to it. It never writes to your vaults.</p>
 %s</div>""" % cards([
-    ("You run these", "<code>install.py</code> asks 4 questions and writes the settings<br><code>start.py</code> starts, stops, or says it is already running"),
+    ("You run these", "<code>install.py</code> asks 5 questions and writes the settings<br><code>install.py --copy</code> makes a copy to experiment on<br><code>start.py</code> starts, stops, or says it is already running"),
     ("Written by the installer", "<code>config.json</code>: every setting<br><code>config.json.bak-&lt;date&gt;</code>: your old settings, when an answer changes<br><code>Start Jeeves (hidden).vbs</code> (Windows): start with no window"),
     ("Written while it runs", "<code>state/chat-sessions.json</code>: the conversation number<br><code>state/jeeves.pid</code>: the ID of the running Jeeves, and its port<br><code>state/read-only-settings.json</code>: the 7 tools that act, written down as refused, so a second Claude cannot use them either"),
-    ("Only if you said yes", "<code>Jeeves.vbs</code> in your Startup folder (Windows)<br>a launch file in <code>Library/LaunchAgents</code> (Mac)<br>Removed by <code>python install.py --uninstall</code>"),
-    ("The program", "<code>jeeves/</code>: the server and the page<br><code>tests/</code>: 70 checks on made-up data<br><code>tools/demo.py</code>: a made-up world to try first"),
+    ("Only if you said yes to starting by itself", "<code>Jeeves.vbs</code> in your Startup folder (Windows)<br>a launch file in <code>Library/LaunchAgents</code> (Mac)<br>Removed by <code>python install.py --uninstall</code>"),
+    ("The program", "<code>jeeves/</code>: the server and the page<br><code>tests/</code>: 77 checks on made-up data (9 need Playwright)<br><code>tools/demo.py</code>: a made-up world to try first"),
     ("To read", "<code>README.md</code>, this guide in <code>guide/</code><br><code>WHAT-I-STOLE.md</code>: what it was built from, and the licences<br><code>config.example.json</code>: every setting with an example"),
 ], 3)
 
@@ -560,4 +564,5 @@ DIAGRAM_DOWNLOAD = """<div class='wrap' style='text-align:center'><h1>Download J
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2],
+         set(sys.argv[3].split(",")) if len(sys.argv) > 3 else None)

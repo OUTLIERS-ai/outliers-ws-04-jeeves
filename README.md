@@ -27,7 +27,8 @@ streams in.
 ## What it needs
 
 - Python 3.11 or newer. Nothing to pip install: the server is Python's own library.
-  (Python 3.10 and older stopped getting security fixes; the installer refuses them.)
+  (Python 3.9 and older no longer get security fixes, and 3.10 gets them only until
+  2026-10-31; the installer refuses anything older than 3.11.)
 - Claude Code, installed and logged in (`claude` works in a terminal).
 - Your second brain (from the second-brain series). Your CRM is optional.
 
@@ -37,10 +38,11 @@ streams in.
 python install.py
 ```
 
-It asks 4 questions (second brain folder, CRM folder, agents folder, port),
-offering what it finds, and writes `config.json`. Run it again and nothing
-changes unless you give a different answer. It asks whether to start Jeeves
-hidden when you log in; the answer defaults to no.
+It asks 5 questions: 4 about folders and the port (second brain folder, CRM
+folder, agents folder, port), offering what it finds, then whether Jeeves should
+start by itself, with no window, each time you switch on your computer and sign
+in; the answer is no unless you type y. It writes `config.json`. Run it again
+and nothing changes unless you give a different answer.
 
 ## Start and stop
 
@@ -53,6 +55,10 @@ On Windows the installer also makes `Start Jeeves (hidden).vbs`: double-click
 it to start Jeeves with no window at all. It does not open your browser: go to
 http://127.0.0.1:4040/ yourself. Only 1 copy runs per port: starting it again
 just says it is already running.
+
+To experiment without touching the Jeeves you use every day, make a second copy
+with a port of its own: `python install.py --copy ../jeeves-trial`, then
+`cd ../jeeves-trial` and `python start.py`. The guide's "The safe way" explains.
 
 **Layouts** (top bar) switches between 4 arrangements of all 10 panels (Big
 screen, Laptop, Chat focus, Morning review) and saves your own. Double-click a
@@ -78,10 +84,14 @@ puts it back.
 ## Tests
 
 ```
+python -m pip install pytest
 python -m pytest -q
 ```
 
-They run against made-up vaults in a temporary folder, with a stand-in for
+On Windows this says `68 passed, 9 skipped` (on a Mac, `64 passed, 13 skipped`:
+4 checks look at files only Windows uses). The 9 open the page in a real browser
+and run only when Playwright is installed (`pip install playwright`, then
+`python -m playwright install chromium`); skipped is fine. They run against made-up vaults in a temporary folder, with a stand-in for
 Claude Code (`tools/fake_claude.py`), so no test touches your real files or
 spends a token.
 
@@ -92,7 +102,7 @@ python tools/demo.py ../jeeves-demo --serve --port 4099
 ```
 
 Then open http://127.0.0.1:4099/ . It builds "Sam the bookkeeper": 2 vaults,
-3 agents and a day of fake Claude logs. The chat answers from a script.
+5 agents and a day of fake Claude logs. The chat answers from a script.
 
 ## Uninstall
 
@@ -100,7 +110,8 @@ Then open http://127.0.0.1:4099/ . It builds "Sam the bookkeeper": 2 vaults,
 python install.py --uninstall
 ```
 
-Removes the logon launcher if one was made and stops Jeeves. Then delete this folder.
+Stops Jeeves, and removes the file that starts it by itself when the computer
+starts, if one was made. Then delete this folder.
 
 The full guide, with pictures and the story of how the original was built, is
 in `guide/GUIDE.md`.

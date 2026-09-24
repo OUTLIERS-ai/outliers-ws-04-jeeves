@@ -2,8 +2,9 @@
 """Start (or stop) Jeeves.
 
     python start.py            start on the port in config.json and open your browser
-    python start.py --no-open  start without opening a browser (used by the logon launcher)
-    python start.py --stop     stop the copy that is running
+    python start.py --no-open  start without opening a browser (the file that starts
+                               Jeeves when the computer starts uses this)
+    python start.py --stop     stop the Jeeves that is running on this folder's port
     python start.py --port 4041
 
 It listens on 127.0.0.1 only: this computer, never your network.
