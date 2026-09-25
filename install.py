@@ -422,7 +422,7 @@ def main(argv=None):
         except Exception:  # noqa: BLE001
             v = ""
         say("Found Claude Code %s" % (v or "(version unknown)"))
-    say("Python %s - nothing to pip install." % sys.version.split()[0], "")
+    say("Python %s - nothing to install with pip." % sys.version.split()[0], "")
 
     old = {}
     if CONFIG.exists():
