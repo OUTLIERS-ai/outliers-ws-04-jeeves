@@ -386,6 +386,12 @@ def copy_to(dest, port=None):
     return 0
 
 
+def ccusage_install():
+    """The line that installs ccusage on this computer (jeeves/config.py)."""
+    from jeeves.config import CCUSAGE_INSTALL
+    return CCUSAGE_INSTALL
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Install Jeeves.")
     ap.add_argument("--vault", help="your second-brain folder")
@@ -498,7 +504,7 @@ def main(argv=None):
     # 3. Nice to have, never required.
     say("", "Optional extras:")
     say("  ccusage (shows your 5-hour usage window): %s"
-        % ("found" if shutil.which("ccusage") else "not found - needs Node.js, then: npm install -g ccusage"))
+        % ("found" if shutil.which("ccusage") else "not found - needs Node.js, then: " + ccusage_install()))
     try:
         import playwright  # noqa: F401
         pw = "found"

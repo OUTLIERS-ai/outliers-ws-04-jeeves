@@ -15,6 +15,12 @@ from pathlib import Path
 # printed "python start.py" fails there with "command not found".
 PY = "python3" if sys.platform == "darwin" else "python"
 
+# How to install ccusage. On a Mac, Node.js from nodejs.org refuses a plain global install
+# ("EACCES: permission denied"); installing into ~/.local needs no password and puts ccusage in
+# ~/.local/bin, where Jeeves finds it (GitHub's test Macs, 2026-09-25).
+CCUSAGE_INSTALL = ("npm install -g --prefix ~/.local ccusage" if sys.platform == "darwin"
+                   else "npm install -g ccusage")
+
 # Where the Work board and FleetView are downloaded from. The Mac copy of each (its name
 # ends in -mac) prints Mac commands. With this line True, a Mac member is sent to the Mac copy
 # and a Windows member to the Windows repo. It was False until the Mac build plan's wave 6, which
